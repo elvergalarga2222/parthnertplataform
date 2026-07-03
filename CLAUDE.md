@@ -69,7 +69,7 @@ npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas (pendiente 
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ✅ Hecho |
-| 1 | Gating Skool: login, webhook, polling, congelamiento | ⬜ Pendiente |
+| 1 | Gating Skool: login, webhook, polling, congelamiento | ✅ Hecho (endpoints Skool por validar con API key real) |
 | 2 | CRM SOBA/NOVA: leads, industrias, pipeline con gates | ⬜ Pendiente |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | ⬜ Pendiente |
 | 4 | Finanzas: 70/30, cuentas por cobrar, margen | ⬜ Pendiente |
