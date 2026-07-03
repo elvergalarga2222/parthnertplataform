@@ -41,8 +41,17 @@ export default async function DashboardPage() {
               Disponible
             </span>
           </Link>
+          <Link
+            href="/finanzas"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 transition hover:border-zinc-500"
+          >
+            <h2 className="font-medium">Finanzas</h2>
+            <p className="text-sm text-zinc-400">Regla 70/30 y cobros</p>
+            <span className="mt-2 inline-block rounded bg-emerald-950 px-2 py-0.5 text-xs text-emerald-300">
+              Disponible
+            </span>
+          </Link>
           {[
-            { title: "Finanzas", desc: "Regla 70/30 y cobros", phase: "Fase 4" },
             { title: "Estrategia", desc: "Guiones y copiloto", phase: "Fase 5" },
             { title: "Academia", desc: "Clases y bot Mi Cabeza", phase: "Fase 6" },
             { title: "Lienzo", desc: "Flujogramas y plantillas", phase: "Fase 7" },
