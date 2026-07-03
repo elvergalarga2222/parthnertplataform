@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requirePartner } from "@/modules/auth/require-partner";
 import { LogoutButton } from "./logout-button";
 
@@ -20,8 +21,17 @@ export default async function DashboardPage() {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Link
+            href="/crm"
+            className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 transition hover:border-zinc-500"
+          >
+            <h2 className="font-medium">CRM</h2>
+            <p className="text-sm text-zinc-400">Pipeline SOBA/NOVA</p>
+            <span className="mt-2 inline-block rounded bg-emerald-950 px-2 py-0.5 text-xs text-emerald-300">
+              Disponible
+            </span>
+          </Link>
           {[
-            { title: "CRM", desc: "Pipeline SOBA/NOVA", phase: "Fase 2" },
             { title: "Workspace", desc: "Kanban y SOPs por cliente", phase: "Fase 3" },
             { title: "Finanzas", desc: "Regla 70/30 y cobros", phase: "Fase 4" },
             { title: "Estrategia", desc: "Guiones y copiloto", phase: "Fase 5" },
