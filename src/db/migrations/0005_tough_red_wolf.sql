@@ -1,0 +1,1 @@
+ALTER TABLE "sop_templates" ADD CONSTRAINT "sop_templates_title_unique" UNIQUE("title");

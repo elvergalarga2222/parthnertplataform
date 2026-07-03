@@ -99,7 +99,7 @@ export const sopTemplates = pgTable(
   "sop_templates",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    title: text("title").notNull(),
+    title: text("title").notNull().unique(),
     kind: text("kind").notNull(),
     phase: text("phase"),
     body: text("body").notNull(),

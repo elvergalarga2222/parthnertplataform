@@ -1,0 +1,53 @@
+# Partner Manager — stack auto-contenido para VPS.
+# Todo corre en contenedores con su propia red y volúmenes; no toca nada
+# preexistente en el servidor. Solo publica el puerto APP_PORT (3000 por
+# defecto).
+name: partner-manager
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgres://pm:${POSTGRES_PASSWORD}@db:5432/partner_manager
+      REDIS_URL: redis://redis:6379
+      SKOOL_API_KEY: ${SKOOL_API_KEY:-}
+      SKOOL_GROUP_ID: ${SKOOL_GROUP_ID:-}
+      SKOOL_WEBHOOK_SECRET: ${SKOOL_WEBHOOK_SECRET:-}
+      DEV_MEMBER_EMAILS: ${DEV_MEMBER_EMAILS:-}
+      AI_KEYS_MASTER_KEY: ${AI_KEYS_MASTER_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: partner_manager
+    volumes:
+      - pm_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pm -d partner_manager"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - pm_redisdata:/data
+    command: ["redis-server", "--appendonly", "yes"]
+
+volumes:
+  pm_pgdata:
+  pm_redisdata:
