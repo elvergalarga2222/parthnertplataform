@@ -46,8 +46,6 @@ src/
 
 ## Comandos
 
-*(Se actualizarán cuando el scaffolding exista — Fase 0)*
-
 ```bash
 npm run dev          # servidor de desarrollo
 npm run build        # build de producción
@@ -55,7 +53,7 @@ npm run lint         # ESLint
 npm run test         # tests (Vitest)
 npm run db:generate  # generar migraciones Drizzle
 npm run db:migrate   # aplicar migraciones
-npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas
+npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas (pendiente — Fase 2+)
 ```
 
 ## Convenciones
@@ -70,7 +68,7 @@ npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas
 
 | Fase | Alcance | Estado |
 |---|---|---|
-| 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ⬜ Pendiente |
+| 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ✅ Hecho |
 | 1 | Gating Skool: login, webhook, polling, congelamiento | ⬜ Pendiente |
 | 2 | CRM SOBA/NOVA: leads, industrias, pipeline con gates | ⬜ Pendiente |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | ⬜ Pendiente |
