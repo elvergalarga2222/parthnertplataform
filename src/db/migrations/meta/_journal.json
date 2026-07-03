@@ -15,6 +15,13 @@
       "when": 1783113286576,
       "tag": "0001_bouncy_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783113509121,
+      "tag": "0002_noisy_sauron",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import { LEAD_STAGES, type LeadStage } from "@/db/schema";
 import { requirePartner } from "@/modules/auth/require-partner";
 import { LeadService } from "@/modules/crm/lead-service";
 import { requiredFieldsFor, SOBA_FIELD_LABELS } from "@/modules/crm/pipeline";
+import { openWorkspaceAction } from "@/app/workspace/actions";
 import { changeStageAction, updateSobaAction } from "../actions";
 import { STAGE_LABELS, StageBadge } from "../stage-badge";
 
@@ -63,6 +64,15 @@ export default async function LeadDetailPage({
           <p className="rounded-md border border-emerald-900 bg-emerald-950 px-3 py-2 text-sm text-emerald-300">
             Campos SOBA guardados.
           </p>
+        )}
+
+        {stage === "cerrado_ganado" && (
+          <form action={openWorkspaceAction}>
+            <input type="hidden" name="leadId" value={lead.id} />
+            <button className="rounded-md bg-emerald-500 px-3 py-1.5 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
+              🎉 Abrir workspace del cliente
+            </button>
+          </form>
         )}
 
         {!isClosed && (
