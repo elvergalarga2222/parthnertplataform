@@ -5,7 +5,7 @@ import { LEAD_STAGES, type LeadStage } from "@/db/schema";
 import { requirePartner } from "@/modules/auth/require-partner";
 import { LeadService } from "@/modules/crm/lead-service";
 import { requiredFieldsFor, SOBA_FIELD_LABELS } from "@/modules/crm/pipeline";
-import { openWorkspaceAction } from "@/app/workspace/actions";
+import { openWorkspaceAction } from "../../workspace/actions";
 import { changeStageAction, updateSobaAction } from "../actions";
 import { STAGE_LABELS, StageBadge } from "../stage-badge";
 
@@ -36,7 +36,7 @@ export default async function LeadDetailPage({
     "w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-white placeholder-zinc-500 focus:border-zinc-400 focus:outline-none";
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
+    <main className="px-6 py-10 text-white">
       <div className="mx-auto max-w-2xl space-y-6">
         <header className="space-y-2">
           <Link href="/crm" className="text-sm text-zinc-400 hover:text-white">

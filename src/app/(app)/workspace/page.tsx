@@ -8,7 +8,7 @@ export default async function WorkspacesPage() {
   const rows = await new WorkspaceService(getDb()).listWorkspaces(partner.id);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
+    <main className="px-6 py-10 text-white">
       <div className="mx-auto max-w-4xl space-y-8">
         <header className="flex items-center justify-between">
           <div>

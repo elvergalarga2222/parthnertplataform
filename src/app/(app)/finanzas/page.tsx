@@ -38,7 +38,7 @@ export default async function FinancePage() {
   const todayStr = today.toISOString().slice(0, 10);
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
+    <main className="px-6 py-10 text-white">
       <div className="mx-auto max-w-6xl space-y-8">
         <header className="flex items-center justify-between">
           <div>

@@ -24,7 +24,7 @@ export default async function AiSettingsPage({
     "w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-zinc-400 focus:outline-none";
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
+    <main className="px-6 py-10 text-white">
       <div className="mx-auto max-w-2xl space-y-6">
         <header>
           <Link href="/dashboard" className="text-sm text-zinc-400 hover:text-white">
