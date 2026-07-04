@@ -1,4 +1,3 @@
-
 name: Deploy to VPS
 on:
   push:
@@ -20,7 +19,7 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           script_stop: true
           script: |
-            set -e
+            set -ex
             APP_DIR="/var/www/partner-manager"
             APP_NAME="partner-manager"
             APP_PORT="${{ secrets.APP_PORT }}"
@@ -33,9 +32,17 @@ jobs:
             npm ci
             npm run build
             npm run db:migrate || echo "Migrate finished (ignoring exit code quirk)"
+            echo "CHECKPOINT: migrate done, checking pm2"
+            which pm2
+            pm2 --version
+            echo "CHECKPOINT: about to describe app"
             if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
+              echo "CHECKPOINT: app exists, restarting"
               pm2 restart "$APP_NAME" --update-env
             else
+              echo "CHECKPOINT: app does not exist, starting fresh"
               PORT="$APP_PORT" pm2 start npm --name "$APP_NAME" -- start
             fi
+            echo "CHECKPOINT: saving pm2"
             pm2 save
+            echo "CHECKPOINT: all done"
