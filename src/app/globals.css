@@ -19,8 +19,67 @@
   }
 }
 
+/* Design tokens of the dark dashboard shell (Partner Manager premium dark) */
+@theme {
+  --color-base: #0a0a0f;
+  --color-surface: #12121a;
+  --color-surface-2: #1a1a24;
+  --color-surface-3: #232330;
+  --color-edge: #262633;
+  --color-edge-strong: #33334a;
+  --color-primary: #8b7cf6;
+  --color-primary-soft: #a795f8;
+  --color-primary-strong: #6a58d8;
+  --color-primary-faint: rgba(139, 124, 246, 0.12);
+  --color-ink: #f4f4f6;
+  --color-ink-secondary: #a3a3b2;
+  --color-ink-muted: #6b6b7d;
+  --color-positive: #4ade80;
+  --color-negative: #f87171;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.25);
+  --shadow-card-hover: 0 2px 4px rgba(0, 0, 0, 0.5),
+    0 12px 32px rgba(0, 0, 0, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(139, 124, 246, 0.35),
+    0 8px 32px rgba(139, 124, 246, 0.12);
+
+  --animate-fade-up: fade-up 0.4s ease-out both;
+
+  @keyframes fade-up {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+::selection {
+  background: rgba(139, 124, 246, 0.35);
+}
+
+/* Discreet thin scrollbars matching the dark shell */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #33334a transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #33334a;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
