@@ -39,8 +39,8 @@ src/
 1. **No hay registro manual.** La identidad viene solo de la API de Skool; la sesión vive en Redis y es revocable al instante (nunca JWT stateless como sesión primaria).
 2. **Revocación = congelar, no borrar.** `partners.status = 'frozen'` bloquea todo vía RLS; los datos se conservan.
 3. **Aislamiento total por Partner.** Toda tabla tenant lleva `partner_id` + política RLS. Ningún query cruza tenants.
-4. **Gates SOBA/NOVA en el pipeline.** Un lead no avanza de etapa sin los campos de Segmento, Oferta (A→B), Vehículo y Atención requeridos por esa transición.
-5. **Industrias mainstream obligatorias.** `leads.industry_id` es NOT NULL contra catálogo cerrado; no se permiten micronichos de texto libre.
+4. **Pipeline configurable por Partner.** Las etapas se crean, renombran, reordenan y eliminan desde la UI sin tocar código (decisión 2026-07: los gates SOBA/NOVA dejaron de ser bloqueo duro; podrán volver como validación opcional configurable en una fase futura).
+5. **Campos personalizados sin migraciones.** `custom_fields` + `custom_field_values` permiten al Partner añadir columnas desde la UI. (El catálogo cerrado de industrias queda diferido junto con los gates SOBA.)
 6. **La plataforma nunca paga tokens de IA.** Resolución de key: BYOK del Partner → créditos prepagados → error 402. Cuota diaria dura en Redis.
 7. **Vista de Cliente capada.** La ruta pública por token solo expone `kanban_tasks` con `is_client_visible = true`, read-only.
 
@@ -53,7 +53,7 @@ npm run lint         # ESLint
 npm run test         # tests (Vitest)
 npm run db:generate  # generar migraciones Drizzle
 npm run db:migrate   # aplicar migraciones
-npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas (pendiente — Fase 2+)
+npm run db:seed      # seed demo del CRM (partner demo, etapas, deals); idempotente
 ```
 
 ## Convenciones
@@ -70,7 +70,7 @@ npm run db:seed      # seeds: industrias, SOPs, plantillas de canvas (pendiente 
 |---|---|---|
 | 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ✅ Hecho |
 | 1 | Gating Skool: login, webhook, polling, congelamiento | ⬜ Pendiente |
-| 2 | CRM SOBA/NOVA: leads, industrias, pipeline con gates | ⬜ Pendiente |
+| 2 | CRM: empresas/contactos/deals, pipeline kanban configurable, campos custom | 🟨 En curso (falta inbox, listas guardadas, automatizaciones) |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | ⬜ Pendiente |
 | 4 | Finanzas: 70/30, cuentas por cobrar, margen | ⬜ Pendiente |
 | 5 | IA: gateway BYOK, editor de guiones, copiloto | ⬜ Pendiente |
