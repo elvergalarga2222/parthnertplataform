@@ -24,3 +24,10 @@ npm-debug.log*
 
 # drizzle
 /drizzle/meta
+
+# redis dump
+dump.rdb
+/.next/
+/node_modules
+.env*
+!.env.example
