@@ -28,7 +28,7 @@ export default function LoginPage() {
             htmlFor="email"
             className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300"
           >
-            Correo de tu cuenta de Skool
+            Tu correo electrónico
           </label>
           <input
             id="email"
@@ -55,7 +55,7 @@ export default function LoginPage() {
           </button>
 
           <p className="mt-4 text-center text-xs text-zinc-500 dark:text-zinc-500">
-            No hay registro manual. Solo miembros activos de Skool pueden entrar.
+            Ingresa con tu correo para acceder a la plataforma.
           </p>
         </form>
       </div>
