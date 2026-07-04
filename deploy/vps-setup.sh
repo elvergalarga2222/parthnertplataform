@@ -40,10 +40,16 @@ fi
 # 3. Variables de entorno (se generan una sola vez y se conservan)
 if [ ! -f "$ENV_FILE" ]; then
   echo "==> Generando $ENV_FILE (primera vez)…"
+  # Elegir el primer puerto libre desde 3000 para no chocar con apps existentes
+  APP_PORT=3000
+  while ss -ltn 2>/dev/null | awk '{print $4}' | grep -q ":${APP_PORT}$"; do
+    APP_PORT=$((APP_PORT + 1))
+  done
+  echo "    -> Puerto libre elegido: $APP_PORT"
   cat > "$ENV_FILE" <<EOF
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 AI_KEYS_MASTER_KEY=$(openssl rand -base64 32)
-APP_PORT=3000
+APP_PORT=$APP_PORT
 # Acceso de desarrollo mientras no haya API key real de Skool:
 DEV_MEMBER_EMAILS=demo@partner.com
 # Completa cuando tengas la API de Skool:
