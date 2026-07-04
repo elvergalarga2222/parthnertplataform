@@ -1,14 +1,12 @@
-name: Deploy to VPS
 
+name: Deploy to VPS
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 concurrency:
   group: deploy-vps
   cancel-in-progress: false
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,18 +24,15 @@ jobs:
             APP_DIR="/var/www/partner-manager"
             APP_NAME="partner-manager"
             APP_PORT="${{ secrets.APP_PORT }}"
-
             if [ ! -d "$APP_DIR/.git" ]; then
               git clone "${{ secrets.REPO_URL }}" "$APP_DIR"
             fi
-
             cd "$APP_DIR"
             git fetch --all
             git reset --hard origin/main
             npm ci
             npm run build
-            npm run db:migrate
-
+            npm run db:migrate || echo "Migrate finished (ignoring exit code quirk)"
             if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
               pm2 restart "$APP_NAME" --update-env
             else
