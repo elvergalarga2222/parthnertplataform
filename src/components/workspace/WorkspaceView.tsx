@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Columns3, Plus, Sparkles } from "lucide-react";
+import { ArrowLeft, Columns3, Plus } from "lucide-react";
 import type {
   WorkspaceCardView,
   WorkspaceSnapshot,
@@ -18,6 +18,7 @@ import { WORKSPACE_STATUSES } from "@/modules/workspace/types";
 import WorkspaceKanban from "./WorkspaceKanban";
 import WorkspaceProfileForm from "./WorkspaceProfileForm";
 import ColumnsModal from "./ColumnsModal";
+import AiPanel from "./ai/AiPanel";
 import CardFormModal from "./CardFormModal";
 import SopPanel from "./SopPanel";
 
@@ -199,22 +200,7 @@ export default function WorkspaceView({
           />
         )}
 
-        {tab === "ia" && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 rounded-2xl border border-edge bg-surface p-10 text-center">
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-faint text-primary-soft">
-              <Sparkles size={24} />
-            </span>
-            <p className="text-[15px] font-semibold">Sub-módulos de IA</p>
-            <p className="max-w-md text-[13px] leading-relaxed text-ink-secondary">
-              Guiones, estrategia, diagnóstico e imágenes con IA llegan en el
-              siguiente PR (módulo IA del workspace), con control de consumo
-              por partner.
-            </p>
-            <span className="rounded-full border border-edge bg-surface-2 px-3 py-1 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
-              Próximamente
-            </span>
-          </div>
-        )}
+        {tab === "ia" && <AiPanel workspaceId={data.id} />}
       </div>
 
       {showColumns && (

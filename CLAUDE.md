@@ -73,7 +73,7 @@ npm run db:seed      # seed demo del CRM (partner demo, etapas, deals); idempote
 | 2 | CRM: empresas/contactos/deals, pipeline kanban configurable, campos custom | 🟨 En curso (falta inbox, listas guardadas, automatizaciones) |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | 🟨 En curso (falta vista pública de cliente; IA en PR aparte) |
 | 4 | Finanzas: 70/30, cuentas por cobrar, margen | ⬜ Pendiente |
-| 5 | IA: gateway BYOK, editor de guiones, copiloto | ⬜ Pendiente |
+| 5 | IA: gateway BYOK, editor de guiones, copiloto | 🟨 En curso (guiones/estrategia/diagnóstico en el workspace con BYOK y cuotas; falta editor de guiones dedicado e imágenes) |
 | 6 | Academia: videos, RAG, bot "Mi Cabeza" | ⬜ Pendiente |
 | 7 | Lienzo visual tldraw + plantillas | ⬜ Pendiente |
 
