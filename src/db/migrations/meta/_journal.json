@@ -15,6 +15,20 @@
       "when": 1783172804990,
       "tag": "0001_certain_justice",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783232012530,
+      "tag": "0002_familiar_caretaker",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783232013774,
+      "tag": "0003_workspace_trigger",
+      "breakpoints": true
     }
   ]
 }

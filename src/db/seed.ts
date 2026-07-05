@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "./index";
 import {
   companies,
@@ -7,8 +7,12 @@ import {
   customFieldValues,
   deals,
   dealActivity,
+  kanbanCards,
+  kanbanColumns,
   partners,
   pipelineStages,
+  workspaceProfiles,
+  workspaces,
 } from "./schema";
 
 // Demo seed for the CRM module. Idempotent: running it twice does not
@@ -48,7 +52,8 @@ async function main() {
     .from(pipelineStages)
     .where(eq(pipelineStages.partnerId, partnerId));
   if (existingStages.length > 0) {
-    console.log("Partner already has pipeline data; nothing to do.");
+    console.log("Partner already has pipeline data; skipping CRM seed.");
+    await seedWorkspaceDemo(partnerId);
     return;
   }
 
@@ -226,6 +231,8 @@ async function main() {
     `Seeded: ${stageRows.length} etapas, ${companyRows.length} empresas, ${contactRows.length} contactos, ${dealRows.length} deals, 1 campo custom.`,
   );
 
+  await seedWorkspaceDemo(partnerId);
+
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
   const [foreign] = await db
@@ -238,6 +245,87 @@ async function main() {
       ),
     );
   if (foreign) throw new Error("Tenant scoping check failed");
+}
+
+// Idempotent workspace demo: backfills workspaces for won deals created
+// before the trigger existed, and fills the first empty workspace with demo
+// cards + a SOP so the module has something to show.
+async function seedWorkspaceDemo(partnerId: string) {
+  const DEFAULT_COLS = ["Por hacer", "En proceso", "En estancamiento", "Hecho"];
+
+  const wonDealsWithoutWs = await db
+    .select({ id: deals.id, title: deals.title })
+    .from(deals)
+    .innerJoin(pipelineStages, eq(deals.stageId, pipelineStages.id))
+    .leftJoin(workspaces, eq(workspaces.dealId, deals.id))
+    .where(
+      and(
+        eq(deals.partnerId, partnerId),
+        eq(pipelineStages.isWon, true),
+        isNull(workspaces.id),
+      ),
+    );
+
+  for (const deal of wonDealsWithoutWs) {
+    const [ws] = await db
+      .insert(workspaces)
+      .values({ partnerId, dealId: deal.id, clientName: deal.title })
+      .onConflictDoNothing({ target: workspaces.dealId })
+      .returning({ id: workspaces.id });
+    if (!ws) continue;
+    await db.insert(workspaceProfiles).values({ workspaceId: ws.id });
+    await db.insert(kanbanColumns).values(
+      DEFAULT_COLS.map((name, i) => ({ workspaceId: ws.id, name, position: i })),
+    );
+    console.log(`Workspace backfilled for won deal "${deal.title}".`);
+  }
+
+  const [emptyWs] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(
+      and(
+        eq(workspaces.partnerId, partnerId),
+        sql`NOT EXISTS (SELECT 1 FROM kanban_cards kc WHERE kc.workspace_id = ${workspaces.id})`,
+      ),
+    )
+    .limit(1);
+  if (!emptyWs) return;
+
+  const cols = await db
+    .select()
+    .from(kanbanColumns)
+    .where(eq(kanbanColumns.workspaceId, emptyWs.id))
+    .orderBy(kanbanColumns.position);
+  if (cols.length === 0) return;
+
+  const colByName = new Map(cols.map((c) => [c.name, c.id]));
+  const fallback = cols[0].id;
+  const cardSeeds = [
+    { title: "Kickoff con el cliente", col: "Hecho", assignee: "Partner Demo" },
+    { title: "Auditoría de presencia digital", col: "En proceso", assignee: "Partner Demo" },
+    { title: "Configurar píxel y analítica", col: "Por hacer", assignee: null },
+    { title: "Plan de contenidos mes 1", col: "Por hacer", assignee: null },
+  ];
+  await db.insert(kanbanCards).values(
+    cardSeeds.map((c, i) => ({
+      workspaceId: emptyWs.id,
+      columnId: colByName.get(c.col) ?? fallback,
+      title: c.title,
+      assignee: c.assignee,
+      position: i,
+    })),
+  );
+
+  await db
+    .update(kanbanColumns)
+    .set({
+      sopContent:
+        "1. Revisar el brief del cliente y accesos.\n2. Priorizar tareas de mayor impacto en facturación.\n3. Toda tarea debe tener responsable y fecha antes de pasar a «En proceso».",
+    })
+    .where(eq(kanbanColumns.id, cols[0].id));
+
+  console.log("Workspace demo cards + SOP seeded.");
 }
 
 main()

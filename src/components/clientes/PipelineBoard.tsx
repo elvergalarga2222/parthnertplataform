@@ -1,20 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import {
-  DndContext,
-  DragOverlay,
-  PointerSensor,
-  closestCorners,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from "@dnd-kit/core";
+import { useMemo } from "react";
 import type { CrmSnapshot, DealView } from "@/modules/crm/types";
-import { stageTotals } from "@/modules/crm/helpers";
-import PipelineColumn from "./PipelineColumn";
+import { formatMoney, stageTotals } from "@/modules/crm/helpers";
+import KanbanBoard, {
+  type KanbanColumnDef,
+} from "@/components/kanban/KanbanBoard";
+import { STAGE_COLORS } from "./stage-colors";
 import DealCard from "./DealCard";
+
+// Deals adapted to the generic board's item shape (columnId = stageId).
+type DealItem = DealView & { columnId: string };
 
 export default function PipelineBoard({
   data,
@@ -25,92 +21,51 @@ export default function PipelineBoard({
   onMoveDeal: (dealId: string, stageId: string, index: number) => void;
   onOpenDeal: (deal: DealView) => void;
 }) {
-  const [activeDeal, setActiveDeal] = useState<DealView | null>(null);
-
-  // Distance constraint keeps plain clicks (open detail) from starting a drag.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  const items = useMemo<DealItem[]>(
+    () => data.deals.map((deal) => ({ ...deal, columnId: deal.stageId })),
+    [data.deals],
   );
-
-  const dealsByStage = useMemo(() => {
-    const map = new Map<string, DealView[]>();
-    for (const stage of data.stages) map.set(stage.id, []);
-    for (const deal of [...data.deals].sort((a, b) => a.position - b.position)) {
-      map.get(deal.stageId)?.push(deal);
-    }
-    return map;
-  }, [data.stages, data.deals]);
 
   const totals = useMemo(() => stageTotals(data.deals), [data.deals]);
 
-  const findDeal = (id: string) => data.deals.find((d) => d.id === id) ?? null;
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveDeal(findDeal(String(event.active.id)));
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    setActiveDeal(null);
-    const { active, over } = event;
-    if (!over) return;
-    const dealId = String(active.id);
-    const overId = String(over.id);
-    const deal = findDeal(dealId);
-    if (!deal) return;
-
-    let targetStageId: string;
-    let targetIndex: number;
-
-    if (overId.startsWith("stage:")) {
-      targetStageId = overId.slice("stage:".length);
-      targetIndex = (dealsByStage.get(targetStageId) ?? []).filter(
-        (d) => d.id !== dealId,
-      ).length;
-    } else {
-      const overDeal = findDeal(overId);
-      if (!overDeal) return;
-      targetStageId = overDeal.stageId;
-      const column = (dealsByStage.get(targetStageId) ?? []).filter(
-        (d) => d.id !== dealId,
-      );
-      targetIndex = column.findIndex((d) => d.id === overId);
-      if (targetIndex === -1) targetIndex = column.length;
-    }
-
-    const currentColumn = dealsByStage.get(deal.stageId) ?? [];
-    const currentIndex = currentColumn.findIndex((d) => d.id === dealId);
-    if (targetStageId === deal.stageId && targetIndex === currentIndex) return;
-
-    onMoveDeal(dealId, targetStageId, targetIndex);
-  };
+  const columns = useMemo<KanbanColumnDef[]>(
+    () =>
+      data.stages.map((stage) => {
+        const color = STAGE_COLORS[stage.color] ?? STAGE_COLORS.gray;
+        const stageStats = totals[stage.id];
+        return {
+          id: stage.id,
+          label: `Etapa ${stage.name}`,
+          header: (
+            <>
+              <span
+                aria-hidden
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: color.dot }}
+              />
+              <h2 className="truncate text-[13px] font-bold">{stage.name}</h2>
+              <span className="rounded-full bg-surface-3 px-1.5 py-0.5 text-[10.5px] font-semibold text-ink-secondary">
+                {stageStats?.count ?? 0}
+              </span>
+              <span className="ml-auto shrink-0 text-[12px] font-semibold text-ink-secondary">
+                {formatMoney(stageStats?.total ?? 0)}
+              </span>
+            </>
+          ),
+        };
+      }),
+    [data.stages, totals],
+  );
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveDeal(null)}
-    >
-      <div className="flex h-full min-h-0 gap-4 overflow-x-auto pb-3">
-        {data.stages.map((stage) => (
-          <PipelineColumn
-            key={stage.id}
-            stage={stage}
-            deals={dealsByStage.get(stage.id) ?? []}
-            total={totals[stage.id]?.total ?? 0}
-            onOpenDeal={onOpenDeal}
-          />
-        ))}
-        {data.stages.length === 0 && (
-          <p className="m-auto text-[13px] text-ink-muted">
-            No hay etapas todavía. Créalas desde el botón «Etapas».
-          </p>
-        )}
-      </div>
-      <DragOverlay>
-        {activeDeal ? <DealCard deal={activeDeal} overlay /> : null}
-      </DragOverlay>
-    </DndContext>
+    <KanbanBoard
+      columns={columns}
+      items={items}
+      onMove={onMoveDeal}
+      onOpenItem={onOpenDeal}
+      renderCard={(item, overlay) => <DealCard deal={item} overlay={overlay} />}
+      emptyColumnHint="Arrastra deals aquí"
+      emptyBoardHint="No hay etapas todavía. Créalas desde el botón «Etapas»."
+    />
   );
 }
