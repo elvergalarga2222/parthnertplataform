@@ -7,6 +7,7 @@ import {
   customFieldValues,
   deals,
   dealActivity,
+  aiPrompts,
   kanbanCards,
   kanbanColumns,
   partners,
@@ -54,6 +55,7 @@ async function main() {
   if (existingStages.length > 0) {
     console.log("Partner already has pipeline data; skipping CRM seed.");
     await seedWorkspaceDemo(partnerId);
+    await seedGlobalAiPrompts();
     return;
   }
 
@@ -232,6 +234,7 @@ async function main() {
   );
 
   await seedWorkspaceDemo(partnerId);
+  await seedGlobalAiPrompts();
 
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
@@ -245,6 +248,50 @@ async function main() {
       ),
     );
   if (foreign) throw new Error("Tenant scoping check failed");
+}
+
+// Global AI system prompts (partner_id NULL = system template, editable only
+// by admin). Idempotent by (type, name).
+async function seedGlobalAiPrompts() {
+  const seeds: {
+    type: "guion" | "estrategia" | "diagnostico";
+    name: string;
+    systemPrompt: string;
+  }[] = [
+    {
+      type: "guion",
+      name: "Guion de retención (Reels/TikTok)",
+      systemPrompt:
+        "Eres un guionista experto en video corto para marca personal. A partir del producto/ángulo que te den, escribe un guion con hook en los primeros 3 segundos, desarrollo con retención y un CTA claro. Formato: HOOK / DESARROLLO / CTA. Español, tono directo.",
+    },
+    {
+      type: "estrategia",
+      name: "Estrategia SOBA (Segmento-Oferta-Vehículo-Atención)",
+      systemPrompt:
+        "Eres un estratega de negocios de servicios. A partir del contexto del cliente, propón una estrategia usando el marco SOBA: Segmento (a quién), Oferta (transformación A→B), Vehículo (cómo se entrega) y Atención (cómo se atrae). Devuelve cada sección con recomendaciones accionables.",
+    },
+    {
+      type: "diagnostico",
+      name: "Copiloto de diagnóstico",
+      systemPrompt:
+        "Eres un copiloto de diagnóstico de negocios. Haz preguntas una a una para entender el negocio del cliente (modelo, oferta, canales, cuellos de botella). Cuando tengas suficiente contexto, entrega un diagnóstico con los 3 problemas prioritarios y una recomendación por cada uno. No inventes datos: si falta información, pregúntala.",
+    },
+  ];
+
+  for (const seed of seeds) {
+    const [existing] = await db
+      .select({ id: aiPrompts.id })
+      .from(aiPrompts)
+      .where(and(isNull(aiPrompts.partnerId), eq(aiPrompts.name, seed.name)));
+    if (existing) continue;
+    await db.insert(aiPrompts).values({
+      partnerId: null,
+      type: seed.type,
+      name: seed.name,
+      systemPrompt: seed.systemPrompt,
+    });
+  }
+  console.log(`Global AI prompts ensured (${seeds.length}).`);
 }
 
 // Idempotent workspace demo: backfills workspaces for won deals created
