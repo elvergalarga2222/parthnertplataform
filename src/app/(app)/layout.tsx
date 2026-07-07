@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { logoutAction } from "@/modules/auth/actions";
 import { getCurrentPartner } from "@/modules/auth/service";
 import { getTeam } from "@/modules/dashboard/data";
+import { getInvoiceAlerts } from "@/modules/finance/service";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Topbar from "@/components/dashboard/Topbar";
 
@@ -18,14 +19,17 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const team = await getTeam();
+  const [team, alerts] = await Promise.all([
+    getTeam(),
+    getInvoiceAlerts(partner.id),
+  ]);
   const displayName = partner.displayName ?? partner.email;
 
   return (
     <div className="flex h-screen overflow-hidden bg-base text-ink">
       <Sidebar team={team} logoutAction={logoutAction} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar displayName={displayName} />
+        <Topbar displayName={displayName} alerts={alerts} />
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

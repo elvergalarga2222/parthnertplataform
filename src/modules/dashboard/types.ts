@@ -13,6 +13,8 @@ export interface Kpi {
   id: string;
   title: string;
   value: number;
+  // ISO currency for `value` (COP/USD/EUR). Omitted on demo KPIs → euro.
+  currency?: string;
   momPct: number;
   momLabel: string;
   footnote?: string;

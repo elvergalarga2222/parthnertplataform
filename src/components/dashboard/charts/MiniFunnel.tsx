@@ -2,13 +2,19 @@
 
 import { useState } from "react";
 import type { PipelineStage } from "@/modules/dashboard/types";
-import { formatEuro } from "@/modules/dashboard/data";
+import { formatMoney } from "@/modules/dashboard/data";
 
 // Rampa secuencial de un solo tono (etapas ordenadas del pipeline),
 // con etiqueta directa por etapa — la identidad nunca depende solo del color.
 const STAGE_COLORS = ["#c4b5fd", "#8b7cf6", "#6a58d8"];
 
-export default function MiniFunnel({ stages }: { stages: PipelineStage[] }) {
+export default function MiniFunnel({
+  stages,
+  currency,
+}: {
+  stages: PipelineStage[];
+  currency?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...stages.map((s) => s.amount));
 
@@ -23,7 +29,7 @@ export default function MiniFunnel({ stages }: { stages: PipelineStage[] }) {
             onPointerLeave={() => setHover(null)}
             onFocus={() => setHover(i)}
             onBlur={() => setHover(null)}
-            aria-label={`${s.name}: ${formatEuro(s.amount)}, ${s.deals} negocios`}
+            aria-label={`${s.name}: ${formatMoney(s.amount, currency)}, ${s.deals} negocios`}
             className="flex h-full flex-1 items-end"
           >
             <span
@@ -53,7 +59,7 @@ export default function MiniFunnel({ stages }: { stages: PipelineStage[] }) {
               <span className="truncate">{s.name}</span>
             </span>
             <span className="shrink-0 font-medium text-ink">
-              {formatEuro(s.amount)}{" "}
+              {formatMoney(s.amount, currency)}{" "}
               <span className="font-normal text-ink-muted">({s.deals})</span>
             </span>
           </li>

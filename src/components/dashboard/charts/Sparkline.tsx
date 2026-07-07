@@ -2,13 +2,19 @@
 
 import { useMemo, useState } from "react";
 import type { KpiTrendPoint } from "@/modules/dashboard/types";
-import { formatEuro } from "@/modules/dashboard/data";
+import { formatMoney } from "@/modules/dashboard/data";
 
 const W = 240;
 const H = 64;
 const PAD = 4;
 
-export default function Sparkline({ points }: { points: KpiTrendPoint[] }) {
+export default function Sparkline({
+  points,
+  currency,
+}: {
+  points: KpiTrendPoint[];
+  currency?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
 
   const coords = useMemo(() => {
@@ -45,7 +51,7 @@ export default function Sparkline({ points }: { points: KpiTrendPoint[] }) {
         onPointerMove={onMove}
         onPointerLeave={() => setHover(null)}
         role="img"
-        aria-label={`Tendencia: ${points.map((p) => `${p.label} ${formatEuro(p.value)}`).join(", ")}`}
+        aria-label={`Tendencia: ${points.map((p) => `${p.label} ${formatMoney(p.value, currency)}`).join(", ")}`}
       >
         <defs>
           <linearGradient id="spark-fill" x1="0" y1="0" x2="0" y2="1">
@@ -90,7 +96,7 @@ export default function Sparkline({ points }: { points: KpiTrendPoint[] }) {
         >
           <span className="text-ink-muted">{points[hover].label} · </span>
           <span className="font-semibold text-ink">
-            {formatEuro(points[hover].value)}
+            {formatMoney(points[hover].value, currency)}
           </span>
         </div>
       )}

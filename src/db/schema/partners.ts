@@ -18,6 +18,9 @@ export const partners = pgTable(
     email: text("email").notNull().unique(),
     displayName: text("display_name"),
     status: text("status").notNull().default("active"),
+    // Default currency for new invoices/expenses/budgets (COP/USD/EUR). Each
+    // record can still override it — there is no cross-currency conversion.
+    defaultCurrency: text("default_currency").notNull().default("USD"),
     frozenAt: timestamp("frozen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -28,6 +31,10 @@ export const partners = pgTable(
   },
   (table) => [
     check("partners_status_check", sql`${table.status} IN ('active', 'frozen')`),
+    check(
+      "partners_default_currency_check",
+      sql`${table.defaultCurrency} IN ('COP', 'USD', 'EUR')`,
+    ),
   ],
 );
 

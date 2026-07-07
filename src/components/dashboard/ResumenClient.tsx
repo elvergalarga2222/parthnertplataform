@@ -10,7 +10,6 @@ import type {
   WeeklyIncome,
 } from "@/modules/dashboard/types";
 import {
-  getKpis,
   getOpportunities,
   getQuarterGoal,
   getTasks,
@@ -37,8 +36,13 @@ function Skeleton({ className }: { className: string }) {
   );
 }
 
-export default function ResumenClient({ userName }: { userName: string }) {
-  const [kpis, setKpis] = useState<Kpi[] | null>(null);
+export default function ResumenClient({
+  userName,
+  kpis,
+}: {
+  userName: string;
+  kpis: Kpi[];
+}) {
   const [opportunities, setOpportunities] = useState<Opportunity[] | null>(
     null,
   );
@@ -55,7 +59,6 @@ export default function ResumenClient({ userName }: { userName: string }) {
       const value = await fetcher();
       if (!cancelled) set(value);
     };
-    load(getKpis, setKpis);
     load(getOpportunities, setOpportunities);
     load(getTasks, setTasks);
     load(getWeeklyIncome, setWeekly);
@@ -79,17 +82,15 @@ export default function ResumenClient({ userName }: { userName: string }) {
           aria-label="Indicadores del mes"
           className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3"
         >
-          {kpis
-            ? kpis.map((kpi, i) => (
-                <div
-                  key={kpi.id}
-                  className="animate-fade-up"
-                  style={{ animationDelay: `${i * 80}ms` }}
-                >
-                  <KpiCard kpi={kpi} />
-                </div>
-              ))
-            : [0, 1, 2].map((i) => <Skeleton key={i} className="h-64" />)}
+          {kpis.map((kpi, i) => (
+            <div
+              key={kpi.id}
+              className="animate-fade-up"
+              style={{ animationDelay: `${i * 80}ms` }}
+            >
+              <KpiCard kpi={kpi} />
+            </div>
+          ))}
         </section>
 
         {opportunities ? (

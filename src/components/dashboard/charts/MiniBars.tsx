@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 import type { KpiTrendPoint } from "@/modules/dashboard/types";
-import { formatEuro } from "@/modules/dashboard/data";
+import { formatMoney } from "@/modules/dashboard/data";
 
-export default function MiniBars({ points }: { points: KpiTrendPoint[] }) {
+export default function MiniBars({
+  points,
+  currency,
+}: {
+  points: KpiTrendPoint[];
+  currency?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...points.map((p) => p.value));
 
@@ -21,7 +27,7 @@ export default function MiniBars({ points }: { points: KpiTrendPoint[] }) {
               onPointerLeave={() => setHover(null)}
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
-              aria-label={`${p.label}: ${formatEuro(p.value)}`}
+              aria-label={`${p.label}: ${formatMoney(p.value, currency)}`}
               className="group flex h-full flex-1 items-end"
             >
               <span
@@ -47,7 +53,7 @@ export default function MiniBars({ points }: { points: KpiTrendPoint[] }) {
         >
           <span className="text-ink-muted">{points[hover].label} · </span>
           <span className="font-semibold text-ink">
-            {formatEuro(points[hover].value)}
+            {formatMoney(points[hover].value, currency)}
           </span>
         </div>
       )}

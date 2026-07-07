@@ -8,6 +8,9 @@ import {
   deals,
   dealActivity,
   aiPrompts,
+  budgetProjections,
+  expenses,
+  invoices,
   kanbanCards,
   kanbanColumns,
   partners,
@@ -56,6 +59,7 @@ async function main() {
     console.log("Partner already has pipeline data; skipping CRM seed.");
     await seedWorkspaceDemo(partnerId);
     await seedGlobalAiPrompts();
+    await seedFinanceDemo(partnerId);
     return;
   }
 
@@ -235,6 +239,7 @@ async function main() {
 
   await seedWorkspaceDemo(partnerId);
   await seedGlobalAiPrompts();
+  await seedFinanceDemo(partnerId);
 
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
@@ -373,6 +378,151 @@ async function seedWorkspaceDemo(partnerId: string) {
     .where(eq(kanbanColumns.id, cols[0].id));
 
   console.log("Workspace demo cards + SOP seeded.");
+}
+
+// Idempotent finance demo (Fase 4): sets the demo partner's currency to EUR (to
+// match the existing demo deals so all 3 KPIs are coherent) and seeds paid
+// invoices across recent months (revenue trend), pending invoices near/past due
+// (topbar alerts), expenses across the real categories, a monthly budget, and a
+// single USD invoice via external_ref to exercise the multi-currency/webhook path.
+async function seedFinanceDemo(partnerId: string) {
+  const [existing] = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(eq(invoices.partnerId, partnerId))
+    .limit(1);
+  if (existing) {
+    console.log("Partner already has finance data; skipping finance seed.");
+    return;
+  }
+
+  await db
+    .update(partners)
+    .set({ defaultCurrency: "EUR", updatedAt: new Date() })
+    .where(eq(partners.id, partnerId));
+
+  const now = new Date();
+  // Mid-month date N months back (avoids month-boundary drift in date_trunc).
+  const monthDate = (offset: number) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 15));
+  // A date `days` from today (UTC) as YYYY-MM-DD.
+  const dayISO = (days: number) => {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const firstOfMonthISO = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  )
+    .toISOString()
+    .slice(0, 10);
+
+  // Paid invoices → v_monthly_revenue trend (EUR).
+  const paidByMonth = [
+    { offset: -5, amount: "30000", client: "Global Solutions" },
+    { offset: -4, amount: "34000", client: "Clínica Vitalis" },
+    { offset: -3, amount: "32000", client: "Project Alfa" },
+    { offset: -2, amount: "40000", client: "Grupo Industrial Norte" },
+    { offset: -1, amount: "48000", client: "Global Solutions" },
+    { offset: 0, amount: "52000", client: "Project Alfa" },
+  ];
+  const paidInvoices = paidByMonth.map((p) => {
+    const d = monthDate(p.offset);
+    return {
+      partnerId,
+      clientName: p.client,
+      description: "Retainer mensual",
+      amount: p.amount,
+      currency: "EUR" as const,
+      status: "pagado" as const,
+      issuedAt: d.toISOString().slice(0, 10),
+      paidAt: d,
+    };
+  });
+
+  // Open invoices → topbar alerts (overdue + near-due).
+  const openInvoices = [
+    {
+      partnerId,
+      clientName: "Clínica Vitalis",
+      description: "Fase 2 — implementación",
+      amount: "12000",
+      currency: "EUR" as const,
+      status: "pendiente" as const,
+      issuedAt: dayISO(-20),
+      dueDate: dayISO(-6), // overdue (dynamic)
+    },
+    {
+      partnerId,
+      clientName: "Grupo Industrial Norte",
+      description: "Consultoría — hito 1",
+      amount: "18000",
+      currency: "EUR" as const,
+      status: "vencido" as const,
+      issuedAt: dayISO(-30),
+      dueDate: dayISO(-12), // explicitly overdue
+    },
+    {
+      partnerId,
+      clientName: "Global Solutions",
+      description: "Growth mensual",
+      amount: "1500",
+      currency: "EUR" as const,
+      status: "pendiente" as const,
+      issuedAt: dayISO(-5),
+      dueDate: dayISO(2), // near-due (within 3 days)
+    },
+    {
+      partnerId,
+      clientName: "Project Alfa",
+      description: "Ampliación de alcance",
+      amount: "9000",
+      currency: "EUR" as const,
+      status: "pendiente" as const,
+      issuedAt: dayISO(-2),
+      dueDate: dayISO(25), // future, not an alert
+    },
+  ];
+
+  // One USD invoice created "by the automation" (external_ref) — demonstrates
+  // multi-currency: it does NOT appear in the EUR dashboard KPI.
+  const usdInvoice = {
+    partnerId,
+    clientName: "Overseas Client LLC",
+    description: "Sprint de estrategia (pago vía n8n)",
+    amount: "2500",
+    currency: "USD" as const,
+    status: "pagado" as const,
+    issuedAt: monthDate(0).toISOString().slice(0, 10),
+    paidAt: monthDate(0),
+    externalRef: `n8n-demo-${partnerId.slice(0, 8)}`,
+  };
+
+  await db.insert(invoices).values([...paidInvoices, ...openInvoices, usdInvoice]);
+
+  // Expenses across the real categories (EUR), this month + prior.
+  await db.insert(expenses).values([
+    { partnerId, category: "ia", description: "Anthropic / OpenAI", amount: "180", currency: "EUR", incurredAt: dayISO(-3) },
+    { partnerId, category: "produccion_video", description: "Higgsfield + Kling + ElevenLabs", amount: "320", currency: "EUR", incurredAt: dayISO(-8) },
+    { partnerId, category: "hosting_vps", description: "VPS + CDN", amount: "95", currency: "EUR", incurredAt: dayISO(-10) },
+    { partnerId, category: "freelancer", description: "Editor de video freelance", amount: "1200", currency: "EUR", incurredAt: dayISO(-14) },
+    { partnerId, category: "herramientas_saas", description: "CapCut Pro + Notion + Figma", amount: "140", currency: "EUR", incurredAt: dayISO(-6) },
+    { partnerId, category: "otro", description: "Gastos varios", amount: "75", currency: "EUR", incurredAt: dayISO(-2) },
+    { partnerId, category: "produccion_video", description: "Banco de música/stock", amount: "60", currency: "EUR", incurredAt: monthDate(-1).toISOString().slice(0, 10) },
+  ]);
+
+  // Monthly budget/projection for the current month (EUR).
+  await db.insert(budgetProjections).values({
+    partnerId,
+    month: firstOfMonthISO,
+    projectedRevenue: "60000",
+    budgetExpenses: "15000",
+    currency: "EUR",
+  });
+
+  console.log(
+    `Finance demo seeded: ${paidInvoices.length} facturas pagadas, ${openInvoices.length} pendientes/vencidas, 1 factura USD (n8n), 7 gastos, 1 presupuesto.`,
+  );
 }
 
 main()
