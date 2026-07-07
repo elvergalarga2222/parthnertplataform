@@ -72,7 +72,7 @@ npm run db:seed      # seed demo del CRM (partner demo, etapas, deals); idempote
 | 1 | Gating Skool: login, webhook, polling, congelamiento | ⬜ Pendiente |
 | 2 | CRM: empresas/contactos/deals, pipeline kanban configurable, campos custom | 🟨 En curso (falta inbox, listas guardadas, automatizaciones) |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | 🟨 En curso (falta vista pública de cliente; IA en PR aparte) |
-| 4 | Finanzas: 70/30, cuentas por cobrar, margen | ⬜ Pendiente |
+| 4 | Finanzas: 70/30, cuentas por cobrar, margen | 🟨 En curso (PR-4a: modelo de datos multi-moneda por partner, vistas `v_monthly_revenue`/`v_monthly_profit` con costo IA, webhook n8n de facturas, KPIs reales + alertas de cobro; falta calendario, formularios y tablas UI = PR-4b) |
 | 5 | IA: gateway BYOK, editor de guiones, copiloto | 🟨 En curso (guiones/estrategia/diagnóstico en el workspace con BYOK y cuotas; falta editor de guiones dedicado e imágenes) |
 | 6 | Academia: videos, RAG, bot "Mi Cabeza" | ⬜ Pendiente |
 | 7 | Lienzo visual tldraw + plantillas | ⬜ Pendiente |

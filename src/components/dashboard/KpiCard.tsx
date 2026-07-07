@@ -2,7 +2,7 @@
 
 import { TrendingDown, TrendingUp } from "lucide-react";
 import type { Kpi } from "@/modules/dashboard/types";
-import { formatEuro } from "@/modules/dashboard/data";
+import { formatMoney } from "@/modules/dashboard/data";
 import Sparkline from "./charts/Sparkline";
 import MiniBars from "./charts/MiniBars";
 import MiniFunnel from "./charts/MiniFunnel";
@@ -25,7 +25,7 @@ export default function KpiCard({ kpi }: { kpi: Kpi }) {
       </header>
 
       <p className="mt-2 text-[28px] font-bold leading-none tracking-tight">
-        {formatEuro(kpi.value)}
+        {formatMoney(kpi.value, kpi.currency)}
       </p>
 
       <p className="mt-2 flex items-center gap-1.5 text-[11.5px]">
@@ -42,10 +42,14 @@ export default function KpiCard({ kpi }: { kpi: Kpi }) {
       </p>
 
       <div className="mt-4">
-        {kpi.chart.kind === "area" && <Sparkline points={kpi.chart.points} />}
-        {kpi.chart.kind === "bars" && <MiniBars points={kpi.chart.points} />}
+        {kpi.chart.kind === "area" && (
+          <Sparkline points={kpi.chart.points} currency={kpi.currency} />
+        )}
+        {kpi.chart.kind === "bars" && (
+          <MiniBars points={kpi.chart.points} currency={kpi.currency} />
+        )}
         {kpi.chart.kind === "funnel" && (
-          <MiniFunnel stages={kpi.chart.stages} />
+          <MiniFunnel stages={kpi.chart.stages} currency={kpi.currency} />
         )}
       </div>
 
