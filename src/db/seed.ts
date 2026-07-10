@@ -417,24 +417,27 @@ async function seedFinanceDemo(partnerId: string) {
     .toISOString()
     .slice(0, 10);
 
-  // Paid invoices → v_monthly_revenue trend (EUR).
+  // Paid invoices → v_monthly_revenue trend (EUR). kind mezcla ~75/25
+  // proyecto/asesoría para que la regla 70/30 tenga datos reales.
   const paidByMonth = [
-    { offset: -5, amount: "30000", client: "Global Solutions" },
-    { offset: -4, amount: "34000", client: "Clínica Vitalis" },
-    { offset: -3, amount: "32000", client: "Project Alfa" },
-    { offset: -2, amount: "40000", client: "Grupo Industrial Norte" },
-    { offset: -1, amount: "48000", client: "Global Solutions" },
-    { offset: 0, amount: "52000", client: "Project Alfa" },
+    { offset: -5, amount: "30000", client: "Global Solutions", kind: "proyecto" as const },
+    { offset: -4, amount: "34000", client: "Clínica Vitalis", kind: "proyecto" as const },
+    { offset: -3, amount: "32000", client: "Project Alfa", kind: "asesoria_mensual" as const },
+    { offset: -2, amount: "40000", client: "Grupo Industrial Norte", kind: "proyecto" as const },
+    { offset: -1, amount: "48000", client: "Global Solutions", kind: "proyecto" as const },
+    { offset: 0, amount: "52000", client: "Project Alfa", kind: "asesoria_mensual" as const },
   ];
   const paidInvoices = paidByMonth.map((p) => {
     const d = monthDate(p.offset);
     return {
       partnerId,
       clientName: p.client,
-      description: "Retainer mensual",
+      description:
+        p.kind === "asesoria_mensual" ? "Asesoría mensual" : "Proyecto — hito",
       amount: p.amount,
       currency: "EUR" as const,
       status: "pagado" as const,
+      kind: p.kind,
       issuedAt: d.toISOString().slice(0, 10),
       paidAt: d,
     };
@@ -517,6 +520,7 @@ async function seedFinanceDemo(partnerId: string) {
     month: firstOfMonthISO,
     projectedRevenue: "60000",
     budgetExpenses: "15000",
+    targetProfit: "35000",
     currency: "EUR",
   });
 

@@ -1,14 +1,36 @@
-import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { deals, invoices, pipelineStages } from "@/db/schema";
+import {
+  budgetProjections,
+  deals,
+  expenses,
+  invoices,
+  pipelineStages,
+  workspaces,
+} from "@/db/schema";
+import { toIsoOrNull } from "@/lib/dates";
+import {
+  effectiveStatus,
+  goalPct,
+  monthEndIso,
+  monthStartIso,
+} from "./helpers";
 import type {
+  BudgetView,
+  CalendarInvoice,
   Currency,
+  ExpenseCategory,
+  ExpenseView,
   InvoiceAlert,
   InvoiceAlerts,
+  InvoiceKind,
   InvoiceStatus,
+  InvoiceView,
   InvoiceWebhookInput,
+  MonthlyGoalProgress,
   MonthlyProfitRow,
   MonthlyRevenueRow,
+  SeventyThirty,
 } from "./types";
 import { CURRENCIES } from "./types";
 
@@ -203,6 +225,470 @@ export async function getInvoiceAlerts(
   overdue.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
   upcoming.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
   return { overdue, upcoming, total: overdue.length + upcoming.length };
+}
+
+// --- Invoices CRUD -----------------------------------------------------------
+
+export interface InvoiceInput {
+  clientName: string;
+  description?: string | null;
+  amount: number;
+  currency: Currency;
+  status: InvoiceStatus;
+  kind: InvoiceKind;
+  issuedAt: string; // YYYY-MM-DD
+  dueDate?: string | null;
+  workspaceId?: string | null;
+}
+
+/** El workspace vinculado debe ser del partner (regla #3). */
+async function requireOwnWorkspace(
+  partnerId: string,
+  workspaceId: string,
+): Promise<void> {
+  const [ws] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(and(eq(workspaces.id, workspaceId), eq(workspaces.partnerId, partnerId)));
+  if (!ws) throw new FinanceError("Espacio no encontrado.");
+}
+
+function toInvoiceView(
+  row: typeof invoices.$inferSelect,
+  workspaceName: string | null,
+  now: Date,
+): InvoiceView {
+  return {
+    id: row.id,
+    clientName: row.clientName,
+    description: row.description,
+    amount: toNumber(row.amount),
+    currency: isCurrency(row.currency) ? row.currency : "USD",
+    status: effectiveStatus(row.status as InvoiceStatus, row.dueDate, now),
+    kind: row.kind as InvoiceKind,
+    issuedAt: row.issuedAt,
+    dueDate: row.dueDate,
+    paidAt: toIsoOrNull(row.paidAt),
+    workspaceId: row.workspaceId,
+    workspaceName,
+    externalRef: row.externalRef,
+  };
+}
+
+/**
+ * Invoices of the partner, newest due first is left to the UI; default order is
+ * due date ascending (nulls last), then issued date. The `status` filter matches
+ * the EFFECTIVE status, so "vencido" includes overdue pending invoices.
+ */
+export async function listInvoices(
+  partnerId: string,
+  filter?: {
+    status?: InvoiceStatus | "todas";
+    currency?: Currency;
+    month?: string; // YYYY-MM sobre issued_at
+  },
+  now: Date = new Date(),
+): Promise<InvoiceView[]> {
+  const conditions = [eq(invoices.partnerId, partnerId)];
+  if (filter?.currency) conditions.push(eq(invoices.currency, filter.currency));
+  if (filter?.month) {
+    conditions.push(gte(invoices.issuedAt, monthStartIso(filter.month)));
+    conditions.push(lte(invoices.issuedAt, monthEndIso(filter.month)));
+  }
+
+  const rows = await db
+    .select({ invoice: invoices, workspaceName: workspaces.clientName })
+    .from(invoices)
+    .leftJoin(workspaces, eq(invoices.workspaceId, workspaces.id))
+    .where(and(...conditions))
+    .orderBy(
+      sql`${invoices.dueDate} ASC NULLS LAST`,
+      asc(invoices.issuedAt),
+      asc(invoices.createdAt),
+    );
+
+  const views = rows.map(({ invoice, workspaceName }) =>
+    toInvoiceView(invoice, workspaceName, now),
+  );
+  if (!filter?.status || filter.status === "todas") return views;
+  return views.filter((v) => v.status === filter.status);
+}
+
+export async function createInvoice(
+  partnerId: string,
+  input: InvoiceInput,
+): Promise<string> {
+  if (input.workspaceId) await requireOwnWorkspace(partnerId, input.workspaceId);
+  const [row] = await db
+    .insert(invoices)
+    .values({
+      partnerId,
+      clientName: input.clientName,
+      description: input.description ?? null,
+      amount: String(input.amount),
+      currency: input.currency,
+      status: input.status,
+      kind: input.kind,
+      issuedAt: input.issuedAt,
+      dueDate: input.dueDate ?? null,
+      // Crear directamente como pagada fija el cobro en este instante.
+      paidAt: input.status === "pagado" ? new Date() : null,
+      workspaceId: input.workspaceId ?? null,
+    })
+    .returning({ id: invoices.id });
+  return row.id;
+}
+
+export async function updateInvoice(
+  partnerId: string,
+  invoiceId: string,
+  patch: Partial<InvoiceInput>,
+): Promise<void> {
+  if (patch.workspaceId) await requireOwnWorkspace(partnerId, patch.workspaceId);
+
+  const [current] = await db
+    .select({ status: invoices.status, paidAt: invoices.paidAt })
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.partnerId, partnerId)));
+  if (!current) throw new FinanceError("Factura no encontrada.");
+
+  // Coherencia status ↔ paid_at al editar: marcar 'pagado' sella el cobro
+  // ahora (si no lo tenía); salir de 'pagado' limpia paid_at.
+  let paidAtPatch: { paidAt: Date | null } | Record<string, never> = {};
+  if (patch.status && patch.status !== current.status) {
+    if (patch.status === "pagado" && !current.paidAt) {
+      paidAtPatch = { paidAt: new Date() };
+    } else if (patch.status !== "pagado") {
+      paidAtPatch = { paidAt: null };
+    }
+  }
+
+  const result = await db
+    .update(invoices)
+    .set({
+      ...(patch.clientName !== undefined ? { clientName: patch.clientName } : {}),
+      ...(patch.description !== undefined
+        ? { description: patch.description ?? null }
+        : {}),
+      ...(patch.amount !== undefined ? { amount: String(patch.amount) } : {}),
+      ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.kind !== undefined ? { kind: patch.kind } : {}),
+      ...(patch.issuedAt !== undefined ? { issuedAt: patch.issuedAt } : {}),
+      ...(patch.dueDate !== undefined ? { dueDate: patch.dueDate ?? null } : {}),
+      ...(patch.workspaceId !== undefined
+        ? { workspaceId: patch.workspaceId ?? null }
+        : {}),
+      ...paidAtPatch,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.partnerId, partnerId)))
+    .returning({ id: invoices.id });
+  if (result.length === 0) throw new FinanceError("Factura no encontrada.");
+}
+
+/**
+ * Deletes a manual invoice. Automation-created invoices (external_ref) cannot
+ * be deleted from the UI: an n8n replay would recreate them and confuse the
+ * partner — regla de producto de PR-4b §4.
+ */
+export async function deleteInvoice(
+  partnerId: string,
+  invoiceId: string,
+): Promise<void> {
+  const [row] = await db
+    .select({ externalRef: invoices.externalRef })
+    .from(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.partnerId, partnerId)));
+  if (!row) throw new FinanceError("Factura no encontrada.");
+  if (row.externalRef !== null) {
+    throw new FinanceError("Las facturas automáticas no se pueden eliminar.");
+  }
+  await db
+    .delete(invoices)
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.partnerId, partnerId)));
+}
+
+export async function markInvoicePaid(
+  partnerId: string,
+  invoiceId: string,
+  paidAt: Date = new Date(),
+): Promise<void> {
+  const result = await db
+    .update(invoices)
+    .set({ status: "pagado", paidAt, updatedAt: new Date() })
+    .where(and(eq(invoices.id, invoiceId), eq(invoices.partnerId, partnerId)))
+    .returning({ id: invoices.id });
+  if (result.length === 0) throw new FinanceError("Factura no encontrada.");
+}
+
+// --- Expenses CRUD -----------------------------------------------------------
+
+export interface ExpenseInput {
+  category: ExpenseCategory;
+  description?: string | null;
+  amount: number;
+  currency: Currency;
+  incurredAt: string; // YYYY-MM-DD
+}
+
+export async function listExpenses(
+  partnerId: string,
+  filter?: { currency?: Currency; month?: string },
+): Promise<ExpenseView[]> {
+  const conditions = [eq(expenses.partnerId, partnerId)];
+  if (filter?.currency) conditions.push(eq(expenses.currency, filter.currency));
+  if (filter?.month) {
+    conditions.push(gte(expenses.incurredAt, monthStartIso(filter.month)));
+    conditions.push(lte(expenses.incurredAt, monthEndIso(filter.month)));
+  }
+  const rows = await db
+    .select()
+    .from(expenses)
+    .where(and(...conditions))
+    .orderBy(desc(expenses.incurredAt), desc(expenses.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    category: r.category as ExpenseCategory,
+    description: r.description,
+    amount: toNumber(r.amount),
+    currency: isCurrency(r.currency) ? r.currency : "USD",
+    incurredAt: r.incurredAt,
+  }));
+}
+
+export async function createExpense(
+  partnerId: string,
+  input: ExpenseInput,
+): Promise<string> {
+  const [row] = await db
+    .insert(expenses)
+    .values({
+      partnerId,
+      category: input.category,
+      description: input.description ?? null,
+      amount: String(input.amount),
+      currency: input.currency,
+      incurredAt: input.incurredAt,
+    })
+    .returning({ id: expenses.id });
+  return row.id;
+}
+
+export async function updateExpense(
+  partnerId: string,
+  expenseId: string,
+  patch: Partial<ExpenseInput>,
+): Promise<void> {
+  const result = await db
+    .update(expenses)
+    .set({
+      ...(patch.category !== undefined ? { category: patch.category } : {}),
+      ...(patch.description !== undefined
+        ? { description: patch.description ?? null }
+        : {}),
+      ...(patch.amount !== undefined ? { amount: String(patch.amount) } : {}),
+      ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
+      ...(patch.incurredAt !== undefined ? { incurredAt: patch.incurredAt } : {}),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(expenses.id, expenseId), eq(expenses.partnerId, partnerId)))
+    .returning({ id: expenses.id });
+  if (result.length === 0) throw new FinanceError("Gasto no encontrado.");
+}
+
+export async function deleteExpense(
+  partnerId: string,
+  expenseId: string,
+): Promise<void> {
+  const result = await db
+    .delete(expenses)
+    .where(and(eq(expenses.id, expenseId), eq(expenses.partnerId, partnerId)))
+    .returning({ id: expenses.id });
+  if (result.length === 0) throw new FinanceError("Gasto no encontrado.");
+}
+
+// --- Budget -------------------------------------------------------------------
+
+export async function getBudget(
+  partnerId: string,
+  month: string, // YYYY-MM
+): Promise<BudgetView | null> {
+  const [row] = await db
+    .select()
+    .from(budgetProjections)
+    .where(
+      and(
+        eq(budgetProjections.partnerId, partnerId),
+        eq(budgetProjections.month, monthStartIso(month)),
+      ),
+    );
+  if (!row) return null;
+  return {
+    month: row.month,
+    projectedRevenue: toNumber(row.projectedRevenue),
+    budgetExpenses: toNumber(row.budgetExpenses),
+    targetProfit: toNumber(row.targetProfit),
+    currency: isCurrency(row.currency) ? row.currency : "USD",
+  };
+}
+
+export async function upsertBudget(
+  partnerId: string,
+  input: {
+    month: string; // YYYY-MM
+    projectedRevenue: number;
+    budgetExpenses: number;
+    targetProfit: number;
+    currency: Currency;
+  },
+): Promise<void> {
+  await db
+    .insert(budgetProjections)
+    .values({
+      partnerId,
+      month: monthStartIso(input.month),
+      projectedRevenue: String(input.projectedRevenue),
+      budgetExpenses: String(input.budgetExpenses),
+      targetProfit: String(input.targetProfit),
+      currency: input.currency,
+    })
+    .onConflictDoUpdate({
+      target: [budgetProjections.partnerId, budgetProjections.month],
+      set: {
+        projectedRevenue: String(input.projectedRevenue),
+        budgetExpenses: String(input.budgetExpenses),
+        targetProfit: String(input.targetProfit),
+        currency: input.currency,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+// --- Calendario de cobros ------------------------------------------------------
+
+/** Facturas con due_date dentro del mes (YYYY-MM), cualquier status. */
+export async function getCollectionsCalendar(
+  partnerId: string,
+  month: string,
+  now: Date = new Date(),
+): Promise<CalendarInvoice[]> {
+  const rows = await db
+    .select({
+      id: invoices.id,
+      clientName: invoices.clientName,
+      amount: invoices.amount,
+      currency: invoices.currency,
+      status: invoices.status,
+      dueDate: invoices.dueDate,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.partnerId, partnerId),
+        isNotNull(invoices.dueDate),
+        gte(invoices.dueDate, monthStartIso(month)),
+        lte(invoices.dueDate, monthEndIso(month)),
+      ),
+    )
+    .orderBy(asc(invoices.dueDate));
+  return rows.map((r) => ({
+    id: r.id,
+    clientName: r.clientName,
+    amount: toNumber(r.amount),
+    currency: (isCurrency(r.currency) ? r.currency : "USD") as Currency,
+    dueDate: r.dueDate!,
+    effectiveStatus: effectiveStatus(r.status as InvoiceStatus, r.dueDate, now),
+  }));
+}
+
+// --- Regla 70/30 ----------------------------------------------------------------
+
+const SEVENTY_THIRTY_WINDOW_DAYS = 90;
+export const SEVENTY_THIRTY_MAX_RECURRING = 0.3;
+
+/**
+ * Ventana móvil de 90 días sobre facturas PAGADAS de la moneda dada: qué
+ * fracción del cobro es asesoría recurrente. breached cuando supera el 30%
+ * (la regla 70/30 de ARQUITECTURA §4.5).
+ */
+export async function getSeventyThirty(
+  partnerId: string,
+  currency: Currency,
+  now: Date = new Date(),
+): Promise<SeventyThirty> {
+  const windowStart = new Date(
+    now.getTime() - SEVENTY_THIRTY_WINDOW_DAYS * 86_400_000,
+  );
+  const rows = await db
+    .select({
+      kind: invoices.kind,
+      total: sql<string>`COALESCE(SUM(${invoices.amount}), 0)`,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.currency, currency),
+        eq(invoices.status, "pagado"),
+        isNotNull(invoices.paidAt),
+        gte(invoices.paidAt, windowStart),
+      ),
+    )
+    .groupBy(invoices.kind);
+
+  let totalPaid = 0;
+  let recurringPaid = 0;
+  for (const r of rows) {
+    const amount = toNumber(r.total);
+    totalPaid += amount;
+    if (r.kind === "asesoria_mensual") recurringPaid += amount;
+  }
+  const recurringPct = totalPaid > 0 ? recurringPaid / totalPaid : 0;
+  return {
+    recurringPct,
+    totalPaid,
+    recurringPaid,
+    currency,
+    breached: recurringPct > SEVENTY_THIRTY_MAX_RECURRING,
+  };
+}
+
+// --- Meta mensual (PR-4b §8) -----------------------------------------------------
+
+/**
+ * Convierte el presupuesto del mes en una meta con % de avance real. null si no
+ * hay presupuesto para ese mes o su moneda no es la seleccionada (la UI muestra
+ * el CTA "Define tu meta"). El % usa SOLO la moneda dada — nunca se mezclan.
+ */
+export async function getMonthlyGoalProgress(
+  partnerId: string,
+  currency: Currency,
+  month: string, // YYYY-MM
+): Promise<MonthlyGoalProgress | null> {
+  const budget = await getBudget(partnerId, month);
+  if (!budget || budget.currency !== currency) return null;
+
+  const monthKey = monthStartIso(month);
+  const [revenueRows, profitRows] = await Promise.all([
+    getMonthlyRevenue(partnerId, currency),
+    getMonthlyProfit(partnerId, currency),
+  ]);
+  const revenueActual =
+    revenueRows.find((r) => r.month === monthKey)?.revenue ?? 0;
+  const profitActual = profitRows.find((r) => r.month === monthKey)?.profit ?? 0;
+
+  const profitGoal = budget.targetProfit > 0 ? budget.targetProfit : null;
+  return {
+    month: monthKey,
+    currency,
+    revenueGoal: budget.projectedRevenue,
+    revenueActual,
+    revenuePct: goalPct(revenueActual, budget.projectedRevenue),
+    profitGoal,
+    profitActual,
+    profitPct: profitGoal === null ? null : goalPct(profitActual, profitGoal),
+  };
 }
 
 // --- Webhook: idempotent invoice upsert -------------------------------------

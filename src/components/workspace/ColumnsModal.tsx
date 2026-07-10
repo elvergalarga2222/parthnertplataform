@@ -9,7 +9,7 @@ import {
   reorderColumnsAction,
   updateColumnAction,
 } from "@/modules/workspace/actions";
-import Modal from "@/components/clientes/Modal";
+import Modal from "@/components/system/Modal";
 import type { RunAction } from "./WorkspaceView";
 
 export default function ColumnsModal({

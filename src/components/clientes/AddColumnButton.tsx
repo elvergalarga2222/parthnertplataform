@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { FIELD_TYPES, type FieldType } from "@/modules/crm/types";
 import { createCustomFieldAction } from "@/modules/crm/actions";
 import type { RunAction } from "./ClientesView";
-import Modal from "./Modal";
+import Modal from "@/components/system/Modal";
 
 const TYPE_LABELS: Record<FieldType, string> = {
   text: "Texto",

@@ -39,6 +39,8 @@ export const budgetProjections = pgTable(
     month: date("month").notNull(),
     projectedRevenue: numeric("projected_revenue").notNull().default("0"),
     budgetExpenses: numeric("budget_expenses").notNull().default("0"),
+    // Meta de profit del mes ("sueldo objetivo"). 0 = sin meta definida.
+    targetProfit: numeric("target_profit").notNull().default("0"),
     currency: text("currency").notNull().default("USD"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -78,6 +80,9 @@ export const invoices = pgTable(
     amount: numeric("amount").notNull().default("0"),
     currency: text("currency").notNull().default("USD"),
     status: text("status").notNull().default("pendiente"),
+    // Tipo de ingreso — alimenta la regla 70/30 (ARQUITECTURA §4.5): la
+    // asesoría recurrente no debe superar el 30% de lo cobrado.
+    kind: text("kind").notNull().default("proyecto"),
     issuedAt: date("issued_at").notNull().defaultNow(),
     dueDate: date("due_date"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
@@ -105,6 +110,10 @@ export const invoices = pgTable(
     check(
       "invoices_status_check",
       sql`${table.status} IN ('pendiente', 'pagado', 'vencido')`,
+    ),
+    check(
+      "invoices_kind_check",
+      sql`${table.kind} IN ('proyecto', 'asesoria_mensual', 'otro')`,
     ),
     check(
       "invoices_currency_check",
