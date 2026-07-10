@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMoney } from "./data";
+import { formatMoney } from "./format";
 
 // Assertions avoid depending on ICU grouping/symbol specifics (which vary with
 // the Node ICU build) — they check the invariants that matter: the number is

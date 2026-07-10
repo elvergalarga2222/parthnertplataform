@@ -1,22 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
-import type {
-  Kpi,
-  Opportunity,
-  QuarterGoal,
-  DashboardTask,
-  WeeklyIncome,
-} from "@/modules/dashboard/types";
-import {
-  getOpportunities,
-  getQuarterGoal,
-  getTasks,
-  getWeeklyIncome,
-} from "@/modules/dashboard/data";
+import { useState } from "react";
+import Link from "next/link";
+import { MoreHorizontal, Target } from "lucide-react";
+import type { Kpi, DashboardTask } from "@/modules/dashboard/types";
+import type { WeeklyRevenue } from "@/modules/finance/service";
+import type { Currency, MonthlyGoalProgress } from "@/modules/finance/types";
+import { formatMoney } from "@/lib/format";
 import KpiCard from "./KpiCard";
-import OpportunityCarousel from "./OpportunityCarousel";
 import GoalRing from "./GoalRing";
 import WeeklyIncomeChart from "./WeeklyIncomeChart";
 import TaskList from "./TaskList";
@@ -28,59 +19,35 @@ function greeting(name: string) {
   return `¡Buenas noches, ${name}!`;
 }
 
-function Skeleton({ className }: { className: string }) {
-  return (
-    <div
-      className={`animate-pulse rounded-2xl border border-edge bg-surface ${className}`}
-    />
-  );
-}
-
 export default function ResumenClient({
   userName,
   kpis,
+  goal,
+  weekly,
+  currency,
+  tasks: initialTasks,
 }: {
   userName: string;
   kpis: Kpi[];
+  goal: MonthlyGoalProgress | null;
+  weekly: WeeklyRevenue[];
+  currency: Currency;
+  tasks: DashboardTask[];
 }) {
-  const [opportunities, setOpportunities] = useState<Opportunity[] | null>(
-    null,
-  );
-  const [tasks, setTasks] = useState<DashboardTask[] | null>(null);
-  const [weekly, setWeekly] = useState<WeeklyIncome[] | null>(null);
-  const [goal, setGoal] = useState<QuarterGoal | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async <T,>(
-      fetcher: () => Promise<T>,
-      set: (v: T) => void,
-    ) => {
-      const value = await fetcher();
-      if (!cancelled) set(value);
-    };
-    load(getOpportunities, setOpportunities);
-    load(getTasks, setTasks);
-    load(getWeeklyIncome, setWeekly);
-    load(getQuarterGoal, setGoal);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+  // Las tareas siguen siendo demo hasta PR-9; el toggle es solo local.
+  const [tasks, setTasks] = useState(initialTasks);
   const toggleTask = (id: string) =>
-    setTasks(
-      (prev) =>
-        prev?.map((t) => (t.id === id ? { ...t, done: !t.done } : t)) ?? prev,
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
     );
 
   return (
     <div className="grid grid-cols-1 gap-6 p-6 pt-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      {/* Center column */}
+      {/* Center column: solo lo accionable — facturación y profit. */}
       <div className="flex min-w-0 flex-col gap-8">
         <section
           aria-label="Indicadores del mes"
-          className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3"
+          className="grid grid-cols-1 gap-4 md:grid-cols-2"
         >
           {kpis.map((kpi, i) => (
             <div
@@ -92,14 +59,6 @@ export default function ResumenClient({
             </div>
           ))}
         </section>
-
-        {opportunities ? (
-          <div className="animate-fade-up">
-            <OpportunityCarousel opportunities={opportunities} />
-          </div>
-        ) : (
-          <Skeleton className="h-72" />
-        )}
       </div>
 
       {/* Right panel */}
@@ -107,27 +66,40 @@ export default function ResumenClient({
         <section className="rounded-2xl border border-edge bg-surface p-5 shadow-card">
           <header className="flex items-center justify-between">
             <h2 className="text-[14px] font-bold tracking-tight">
-              Estadística
+              Meta del mes
             </h2>
-            <button
-              type="button"
-              aria-label="Opciones de estadística"
-              className="text-ink-muted transition-colors hover:text-ink"
-            >
-              <MoreHorizontal size={18} />
-            </button>
           </header>
           <div className="mt-4 flex flex-col items-center text-center">
             {goal ? (
               <div className="animate-fade-up flex flex-col items-center">
-                <GoalRing pct={goal.pct} />
+                <GoalRing pct={goal.revenuePct} />
                 <p className="mt-4 text-[15px] font-semibold">
                   {greeting(userName)}
                 </p>
-                <p className="mt-1 text-[12px] text-ink-muted">{goal.label}</p>
+                <p className="mt-1 text-[12px] text-ink-muted">
+                  {formatMoney(goal.revenueActual, currency)} de{" "}
+                  {formatMoney(goal.revenueGoal, currency)} facturados
+                </p>
+                {goal.profitGoal !== null && goal.profitPct !== null && (
+                  <p className="mt-1 text-[12px] text-ink-muted">
+                    Profit: {goal.profitPct}% del sueldo objetivo (
+                    {formatMoney(goal.profitGoal, currency)})
+                  </p>
+                )}
               </div>
             ) : (
-              <div className="h-52 w-full animate-pulse rounded-xl bg-surface-2" />
+              <div className="flex flex-col items-center gap-3 py-6">
+                <Target size={32} className="text-ink-muted" />
+                <p className="text-[12.5px] text-ink-muted">
+                  Aún no defines tu meta de este mes.
+                </p>
+                <Link
+                  href="/partner-business"
+                  className="rounded-xl bg-primary-faint px-4 py-2 text-[12.5px] font-semibold text-primary-soft transition-colors hover:bg-primary/25"
+                >
+                  Define tu meta en Partner Business
+                </Link>
+              </div>
             )}
           </div>
         </section>
@@ -136,14 +108,8 @@ export default function ResumenClient({
           <h2 className="text-[13px] font-semibold text-ink-secondary">
             Ingresos Semanales (Mes Actual)
           </h2>
-          <div className="mt-4">
-            {weekly ? (
-              <div className="animate-fade-up">
-                <WeeklyIncomeChart data={weekly} />
-              </div>
-            ) : (
-              <div className="h-32 w-full animate-pulse rounded-xl bg-surface-2" />
-            )}
+          <div className="mt-4 animate-fade-up">
+            <WeeklyIncomeChart data={weekly} currency={currency} />
           </div>
         </section>
 
@@ -160,27 +126,8 @@ export default function ResumenClient({
               <MoreHorizontal size={18} />
             </button>
           </header>
-          <div className="mt-4">
-            {tasks ? (
-              <div className="animate-fade-up">
-                <TaskList tasks={tasks} onToggle={toggleTask} />
-                <button
-                  type="button"
-                  className="mt-3 w-full rounded-xl bg-primary-faint py-2.5 text-[12.5px] font-semibold text-primary-soft transition-colors duration-150 hover:bg-primary/25"
-                >
-                  Ver todas las tareas
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    className="h-14 animate-pulse rounded-xl bg-surface-2"
-                  />
-                ))}
-              </div>
-            )}
+          <div className="mt-4 animate-fade-up">
+            <TaskList tasks={tasks} onToggle={toggleTask} />
           </div>
         </section>
       </aside>

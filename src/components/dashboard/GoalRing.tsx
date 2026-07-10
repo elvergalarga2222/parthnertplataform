@@ -19,7 +19,7 @@ export default function GoalRing({ pct }: { pct: number }) {
     <div
       className="relative"
       role="img"
-      aria-label={`${pct}% de la meta trimestral cumplida`}
+      aria-label={`${pct}% de la meta del mes cumplida`}
     >
       <svg width={SIZE} height={SIZE} className="-rotate-90">
         <circle
