@@ -7,6 +7,7 @@ import {
   workspaceProfiles,
   workspaces,
 } from "@/db/schema";
+import { toIsoOrEpoch } from "@/lib/dates";
 import type {
   WorkspaceCardView,
   WorkspaceColumnView,
@@ -57,7 +58,7 @@ export async function getWorkspaces(
     status: ws.status as WorkspaceStatus,
     dealId: ws.dealId,
     dealValue: dealValue === null ? null : Number(dealValue),
-    createdAt: ws.createdAt.toISOString(),
+    createdAt: toIsoOrEpoch(ws.createdAt),
     cardCount,
     doneCount,
   }));

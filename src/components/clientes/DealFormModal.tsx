@@ -51,13 +51,23 @@ export default function DealFormModal({
   const [nextActivityDate, setNextActivityDate] = useState(
     deal?.nextActivityAt ? deal.nextActivityAt.slice(0, 10) : "",
   );
+  const [dateError, setDateError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const numericValue = Number(value || "0");
-    const activityAt = nextActivityDate
-      ? new Date(`${nextActivityDate}T09:00:00`).toISOString()
-      : null;
+    // El input type="date" acepta años de 5-6 dígitos en varios navegadores;
+    // un año fuera de rango produce un Invalid Date que revienta al serializar.
+    let activityAt: string | null = null;
+    if (nextActivityDate) {
+      const parsed = new Date(`${nextActivityDate}T09:00:00`);
+      const year = parsed.getFullYear();
+      if (Number.isNaN(parsed.getTime()) || year < 1970 || year > 2100) {
+        setDateError("La fecha no es válida (usa un año entre 1970 y 2100).");
+        return;
+      }
+      activityAt = parsed.toISOString();
+    }
 
     if (mode === "create") {
       await runAction(
@@ -269,10 +279,20 @@ export default function DealFormModal({
             Fecha de la actividad
             <input
               type="date"
+              min="1970-01-01"
+              max="2100-12-31"
               value={nextActivityDate}
-              onChange={(e) => setNextActivityDate(e.target.value)}
+              onChange={(e) => {
+                setNextActivityDate(e.target.value);
+                setDateError(null);
+              }}
               className={inputClass}
             />
+            {dateError && (
+              <span className="text-[11.5px] font-medium text-negative">
+                {dateError}
+              </span>
+            )}
           </label>
         </div>
 

@@ -9,6 +9,7 @@ import {
   deals,
   pipelineStages,
 } from "@/db/schema";
+import { toIsoOrEpoch, toIsoOrNull } from "@/lib/dates";
 import { slugifyFieldKey } from "./helpers";
 import type {
   CrmSnapshot,
@@ -134,13 +135,13 @@ export async function getCrmSnapshot(partnerId: string): Promise<CrmSnapshot> {
       stageId: deal.stageId,
       position: deal.position,
       nextActivity: deal.nextActivity,
-      nextActivityAt: deal.nextActivityAt?.toISOString() ?? null,
+      nextActivityAt: toIsoOrNull(deal.nextActivityAt),
       fit: (deal.fit as FitLevel | null) ?? null,
       companyId: deal.companyId,
       companyName,
       contactId: deal.contactId,
       contactName,
-      createdAt: deal.createdAt.toISOString(),
+      createdAt: toIsoOrEpoch(deal.createdAt),
       custom: valuesByDeal.get(deal.id) ?? {},
     })),
     customFields: fieldRows.map(
@@ -451,7 +452,7 @@ export async function getDealActivity(
     id: r.id,
     type: r.type,
     description: r.description,
-    createdAt: r.createdAt.toISOString(),
+    createdAt: toIsoOrEpoch(r.createdAt),
   }));
 }
 
