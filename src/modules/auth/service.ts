@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accessAuditLog, partners } from "@/db/schema";
+import { isAdminEmail } from "./admin";
 import { getMembershipProvider } from "./providers";
-import { createSession, getSessionPartnerId } from "./session";
+import { createSession, getSessionPartnerId, revokeAllSessions } from "./session";
 
 export type LoginErrorCode = "not_member" | "frozen";
 
@@ -93,4 +94,67 @@ export async function getCurrentPartner(): Promise<Partner | null> {
 
   if (!partner || partner.status !== "active") return null;
   return partner;
+}
+
+// ---------------------------------------------------------------------------
+// Congelamiento (regla #2: congelar bloquea el acceso, nunca borra datos)
+
+export class AuthError extends Error {}
+
+// ⚠️ CONTRATO PÚBLICO — no cambiar nombre, firma ni ubicación. PR-10 (job de
+// sincronización de membresías Skool) invoca exactamente
+// freezePartner(partnerId, { adminEmail: "system:membership-sync" }) y su
+// inverso. `actor.adminEmail` es solo un identificador de auditoría — la
+// autorización ocurre en la capa que llama (actions de admin / job); los
+// valores `system:*` identifican procesos automáticos en access_audit_log.
+
+export async function freezePartner(
+  partnerId: string,
+  actor: { adminEmail: string },
+): Promise<void> {
+  // Anti-lockout: jamás congelar una cuenta de operador (ADMIN_EMAILS).
+  const [target] = await db
+    .select({ email: partners.email })
+    .from(partners)
+    .where(eq(partners.id, partnerId));
+  if (target && isAdminEmail(target.email)) {
+    throw new AuthError("No se puede congelar a un administrador.");
+  }
+
+  const result = await db
+    .update(partners)
+    .set({ status: "frozen", frozenAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(partners.id, partnerId), eq(partners.status, "active")))
+    .returning({ id: partners.id });
+  if (result.length === 0) {
+    throw new AuthError("Partner no encontrado o ya congelado.");
+  }
+
+  await db.insert(accessAuditLog).values({
+    partnerId,
+    event: "partner_frozen",
+    detail: { by: actor.adminEmail },
+  });
+  await revokeAllSessions(partnerId);
+}
+
+/** Reactiva a un partner congelado. NO recrea sesiones: vuelve a loguearse. */
+export async function unfreezePartner(
+  partnerId: string,
+  actor: { adminEmail: string },
+): Promise<void> {
+  const result = await db
+    .update(partners)
+    .set({ status: "active", frozenAt: null, updatedAt: new Date() })
+    .where(and(eq(partners.id, partnerId), eq(partners.status, "frozen")))
+    .returning({ id: partners.id });
+  if (result.length === 0) {
+    throw new AuthError("Partner no encontrado o no está congelado.");
+  }
+
+  await db.insert(accessAuditLog).values({
+    partnerId,
+    event: "partner_unfrozen",
+    detail: { by: actor.adminEmail },
+  });
 }
