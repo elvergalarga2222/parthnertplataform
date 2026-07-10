@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { KpiTrendPoint } from "@/modules/dashboard/types";
-import { formatMoney } from "@/modules/dashboard/data";
+import { formatMoney } from "@/lib/format";
 
 export default function MiniBars({
   points,

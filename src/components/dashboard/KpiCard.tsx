@@ -2,7 +2,7 @@
 
 import { TrendingDown, TrendingUp } from "lucide-react";
 import type { Kpi } from "@/modules/dashboard/types";
-import { formatMoney } from "@/modules/dashboard/data";
+import { formatMoney } from "@/lib/format";
 import Sparkline from "./charts/Sparkline";
 import MiniBars from "./charts/MiniBars";
 import MiniFunnel from "./charts/MiniFunnel";

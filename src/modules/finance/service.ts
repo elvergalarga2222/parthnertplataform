@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { toIsoOrNull } from "@/lib/dates";
 import {
+  buildWeekBuckets,
   effectiveStatus,
   goalPct,
   monthEndIso,
@@ -689,6 +690,51 @@ export async function getMonthlyGoalProgress(
     profitActual,
     profitPct: profitGoal === null ? null : goalPct(profitActual, profitGoal),
   };
+}
+
+// --- Ingresos semanales del mes (dashboard) ------------------------------------
+
+export interface WeeklyRevenue {
+  week: string; // etiqueta "1-7 jul"
+  amount: number;
+}
+
+/**
+ * Ingresos cobrados (facturas pagadas, por paid_at) del mes de `now`,
+ * agrupados en los buckets semanales de buildWeekBuckets, en la moneda dada.
+ * Misma shape que consumía el WeeklyIncomeChart demo.
+ */
+export async function getWeeklyRevenue(
+  partnerId: string,
+  currency: Currency,
+  now: Date = new Date(),
+): Promise<WeeklyRevenue[]> {
+  const buckets = buildWeekBuckets(now);
+  const monthStart = new Date(`${buckets[0].start}T00:00:00.000Z`);
+  const monthEnd = new Date(`${buckets.at(-1)!.end}T23:59:59.999Z`);
+
+  const rows = await db
+    .select({ amount: invoices.amount, paidAt: invoices.paidAt })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.partnerId, partnerId),
+        eq(invoices.currency, currency),
+        eq(invoices.status, "pagado"),
+        isNotNull(invoices.paidAt),
+        gte(invoices.paidAt, monthStart),
+        lte(invoices.paidAt, monthEnd),
+      ),
+    );
+
+  const totals = buckets.map(() => 0);
+  for (const row of rows) {
+    const day = toIsoOrNull(row.paidAt)?.slice(0, 10);
+    if (!day) continue;
+    const idx = buckets.findIndex((b) => day >= b.start && day <= b.end);
+    if (idx >= 0) totals[idx] += toNumber(row.amount);
+  }
+  return buckets.map((b, i) => ({ week: b.label, amount: totals[i] }));
 }
 
 // --- Webhook: idempotent invoice upsert -------------------------------------

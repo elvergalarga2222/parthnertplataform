@@ -75,6 +75,48 @@ export function monthEndIso(month: string): string {
     .slice(0, 10);
 }
 
+export interface WeekBucket {
+  /** YYYY-MM-DD inclusive. */
+  start: string;
+  /** YYYY-MM-DD inclusive. */
+  end: string;
+  /** Etiqueta corta es-ES, p. ej. "1-7 jul". */
+  label: string;
+}
+
+const MONTH_SHORT = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+/**
+ * Buckets semanales del mes de `now` (UTC): tramos de 7 días desde el día 1;
+ * el último tramo absorbe el resto del mes (4-5 buckets). Solo aritmética
+ * Date.UTC.
+ */
+export function buildWeekBuckets(now: Date): WeekBucket[] {
+  const year = now.getUTCFullYear();
+  const monthIndex = now.getUTCMonth();
+  const lastDay = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const iso = (day: number) =>
+    new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
+
+  const buckets: WeekBucket[] = [];
+  for (let start = 1; start <= lastDay; start += 7) {
+    // El último bucket se extiende hasta fin de mes para no dejar un tramo
+    // suelto de 1-3 días (patrón "22-30 Jun" del diseño).
+    const isLast = start + 13 > lastDay;
+    const end = isLast ? lastDay : start + 6;
+    buckets.push({
+      start: iso(start),
+      end: iso(end),
+      label: `${start}-${end} ${MONTH_SHORT[monthIndex]}`,
+    });
+    if (isLast) break;
+  }
+  return buckets;
+}
+
 /**
  * % de avance hacia una meta, redondeado. 0 si la meta es 0 o negativa (nunca
  * división por cero); puede superar 100 cuando la meta se rebasa.
