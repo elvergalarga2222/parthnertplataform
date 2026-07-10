@@ -184,4 +184,63 @@ describe.skipIf(!hasDb)("workspace service (integration)", () => {
       facturacion_anual: "120k",
     });
   });
+
+  it("assembles the export document data and scopes it by partner", async () => {
+    const list = await ws.getWorkspaces(partnerA);
+    const wsId = list[0].id;
+
+    await ws.updateWorkspaceProfile(partnerA, wsId, {
+      strategyDoc: "# Plan\n- Fase 1\n- Fase 2",
+    });
+    const { columns } = await ws.getWorkspaceSnapshot(partnerA, wsId);
+    await ws.createCard(partnerA, wsId, {
+      columnId: columns[0].id,
+      title: "Tarea exportable",
+      description: "Aparece en el documento",
+    });
+    // Generaciones IA del workspace: la más reciente por tipo entra al export.
+    await db.insert(schema.aiGenerations).values([
+      {
+        partnerId: partnerA,
+        workspaceId: wsId,
+        type: "estrategia",
+        outputText: "Estrategia vieja",
+        tokensInput: 1,
+        tokensOutput: 1,
+        costUsd: "0",
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+      },
+      {
+        partnerId: partnerA,
+        workspaceId: wsId,
+        type: "estrategia",
+        outputText: "Estrategia nueva",
+        tokensInput: 1,
+        tokensOutput: 1,
+        costUsd: "0",
+        createdAt: new Date("2026-02-01T00:00:00Z"),
+      },
+    ]);
+
+    const data = await ws.getWorkspaceExportData(partnerA, wsId);
+    expect(data.profile.strategyDoc).toContain("# Plan");
+    expect(data.columns.length).toBeGreaterThan(0);
+    expect(data.columns.some((c) => c.cards.length > 0)).toBe(true);
+    const gen = data.latestGenerations.find((g) => g.type === "estrategia");
+    expect(gen?.outputText).toBe("Estrategia nueva");
+
+    // El snapshot también expone la última generación de estrategia.
+    const snapshot = await ws.getWorkspaceSnapshot(partnerA, wsId);
+    expect(snapshot.latestStrategyGeneration?.outputText).toBe("Estrategia nueva");
+
+    // Cross-tenant: exportar el workspace de A como B ⇒ "no encontrado".
+    await expect(ws.getWorkspaceExportData(partnerB, wsId)).rejects.toThrow(
+      /no encontrado/,
+    );
+
+    const { eq } = await import("drizzle-orm");
+    await db
+      .delete(schema.aiGenerations)
+      .where(eq(schema.aiGenerations.partnerId, partnerA));
+  });
 });
