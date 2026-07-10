@@ -32,6 +32,8 @@ export interface StageView {
   position: number;
   isWon: boolean;
   isLost: boolean;
+  /** La etapa exige brief para que entren deals de clientes nuevos. */
+  requiresBrief: boolean;
 }
 
 export interface DealView {
@@ -49,6 +51,10 @@ export interface DealView {
   contactId: string | null;
   contactName: string | null;
   createdAt: string;
+  /** Diagnóstico/brief del cliente (texto libre). */
+  brief: string | null;
+  /** Sin ningún otro deal ganado para su empresa/contacto (gate de brief). */
+  isNewClient: boolean;
   /** customFieldId -> value */
   custom: Record<string, unknown>;
 }

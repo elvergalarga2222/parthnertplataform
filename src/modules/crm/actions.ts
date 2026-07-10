@@ -66,6 +66,7 @@ const stagePatchSchema = stageSchema.partial().extend({
   stageId: z.string().uuid(),
   isWon: z.boolean().optional(),
   isLost: z.boolean().optional(),
+  requiresBrief: z.boolean().optional(),
 });
 
 export async function updateStageAction(
@@ -117,6 +118,7 @@ const dealSchema = z.object({
   fit: z.enum(FIT_LEVELS).nullish(),
   nextActivity: z.string().trim().max(160).nullish(),
   nextActivityAt: safeActivityAt.nullish(),
+  brief: z.string().trim().max(8000).nullish(),
   newCompanyName: z.string().trim().max(80).nullish(),
   newContactName: z.string().trim().max(80).nullish(),
 });
@@ -150,6 +152,7 @@ export async function createDealAction(
       fit: data.fit ?? null,
       nextActivity: data.nextActivity ?? null,
       nextActivityAt: data.nextActivityAt ? new Date(data.nextActivityAt) : null,
+      brief: data.brief ?? null,
     });
   });
 }
@@ -161,6 +164,7 @@ const dealPatchSchema = z.object({
   fit: z.enum(FIT_LEVELS).nullish(),
   nextActivity: z.string().trim().max(160).nullish(),
   nextActivityAt: safeActivityAt.nullish(),
+  brief: z.string().trim().max(8000).nullish(),
 });
 
 export async function updateDealAction(

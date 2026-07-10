@@ -78,6 +78,9 @@ export const pipelineStages = pgTable(
     position: integer("position").notNull(),
     isWon: boolean("is_won").notNull().default(false),
     isLost: boolean("is_lost").notNull().default(false),
+    // La etapa exige brief para entrar cuando el cliente es nuevo (gate
+    // configurable por partner — versión mínima del regreso de los gates SOBA).
+    requiresBrief: boolean("requires_brief").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -116,6 +119,9 @@ export const deals = pgTable(
     nextActivity: text("next_activity"),
     nextActivityAt: timestamp("next_activity_at", { withTimezone: true }),
     fit: text("fit"),
+    // Diagnóstico/brief del cliente (texto libre) — exigido por el gate de
+    // etapas con requires_brief cuando el cliente es nuevo.
+    brief: text("brief"),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
