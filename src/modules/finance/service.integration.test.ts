@@ -204,4 +204,257 @@ describe.skipIf(!hasDb)("finance service (integration)", () => {
     // A has only a pending EUR invoice due in +10 days → not an alert.
     expect(alertsA.total).toBe(0);
   });
+
+  // --- PR-4b: CRUD, calendario, presupuesto, 70/30 y meta mensual ------------
+
+  it("creates, lists (effective status), updates and deletes an invoice", async () => {
+    const id = await finance.createInvoice(partnerA, {
+      clientName: "CRUD Cliente",
+      amount: 700,
+      currency: "COP",
+      status: "pendiente",
+      kind: "proyecto",
+      issuedAt: isoDay(-10),
+      dueDate: isoDay(-1), // vencida en lectura, sin job
+    });
+
+    const list = await finance.listInvoices(partnerA, { currency: "COP" });
+    const created = list.find((i) => i.id === id);
+    expect(created).toBeDefined();
+    expect(created!.status).toBe("vencido"); // status efectivo derivado
+    expect(created!.kind).toBe("proyecto");
+
+    // El filtro de status usa el status EFECTIVO.
+    const vencidas = await finance.listInvoices(partnerA, {
+      currency: "COP",
+      status: "vencido",
+    });
+    expect(vencidas.some((i) => i.id === id)).toBe(true);
+
+    await finance.updateInvoice(partnerA, id, {
+      kind: "asesoria_mensual",
+      dueDate: isoDay(5),
+    });
+    const [after] = await finance.listInvoices(partnerA, { currency: "COP" });
+    expect(after.kind).toBe("asesoria_mensual");
+    expect(after.status).toBe("pendiente"); // ya no está vencida
+
+    await finance.deleteInvoice(partnerA, id);
+    expect(
+      (await finance.listInvoices(partnerA, { currency: "COP" })).length,
+    ).toBe(0);
+  });
+
+  it("markInvoicePaid feeds v_monthly_revenue", async () => {
+    const id = await finance.createInvoice(partnerA, {
+      clientName: "Pago directo",
+      amount: 2000,
+      currency: "COP",
+      status: "pendiente",
+      kind: "proyecto",
+      issuedAt: isoDay(0),
+    });
+    const before = await finance.getMonthlyRevenue(partnerA, "COP");
+    const beforeTotal = before.reduce((s, r) => s + r.revenue, 0);
+
+    await finance.markInvoicePaid(partnerA, id);
+
+    const [row] = await finance.listInvoices(partnerA, { currency: "COP" });
+    expect(row.status).toBe("pagado");
+    expect(row.paidAt).not.toBeNull();
+
+    const revenue = await finance.getMonthlyRevenue(partnerA, "COP");
+    expect(revenue.reduce((s, r) => s + r.revenue, 0)).toBe(beforeTotal + 2000);
+
+    await finance.deleteInvoice(partnerA, id);
+  });
+
+  it("never deletes automation invoices (external_ref)", async () => {
+    const { id } = await finance.upsertInvoiceFromWebhook(partnerA, {
+      externalRef: `ext-del-${randomUUID()}`,
+      clientName: "Automática",
+      amount: 100,
+      currency: "USD",
+    });
+    await expect(finance.deleteInvoice(partnerA, id)).rejects.toThrow(
+      /automáticas/,
+    );
+  });
+
+  it("isolates invoice/expense mutations between partners", async () => {
+    const invoiceId = await finance.createInvoice(partnerA, {
+      clientName: "Solo de A",
+      amount: 10,
+      currency: "EUR",
+      status: "pendiente",
+      kind: "otro",
+      issuedAt: isoDay(0),
+    });
+    const expenseId = await finance.createExpense(partnerA, {
+      category: "ia",
+      amount: 5,
+      currency: "EUR",
+      incurredAt: isoDay(0),
+    });
+
+    await expect(
+      finance.updateInvoice(partnerB, invoiceId, { amount: 999 }),
+    ).rejects.toThrow(/no encontrada/);
+    await expect(finance.deleteInvoice(partnerB, invoiceId)).rejects.toThrow(
+      /no encontrada/,
+    );
+    await expect(
+      finance.markInvoicePaid(partnerB, invoiceId),
+    ).rejects.toThrow(/no encontrada/);
+    await expect(
+      finance.updateExpense(partnerB, expenseId, { amount: 999 }),
+    ).rejects.toThrow(/no encontrado/);
+    await expect(finance.deleteExpense(partnerB, expenseId)).rejects.toThrow(
+      /no encontrado/,
+    );
+    // B tampoco puede colgar una factura de un workspace de A: no hay
+    // workspaces de B, así que basta validar el propio.
+    await expect(
+      finance.createInvoice(partnerB, {
+        clientName: "Cruzada",
+        amount: 1,
+        currency: "EUR",
+        status: "pendiente",
+        kind: "proyecto",
+        issuedAt: isoDay(0),
+        workspaceId: randomUUID(),
+      }),
+    ).rejects.toThrow(/Espacio no encontrado/);
+
+    await finance.deleteInvoice(partnerA, invoiceId);
+    await finance.deleteExpense(partnerA, expenseId);
+  });
+
+  it("upserts the monthly budget without duplicating", async () => {
+    const month = "2031-05";
+    await finance.upsertBudget(partnerA, {
+      month,
+      projectedRevenue: 80_000_000,
+      budgetExpenses: 10_000_000,
+      targetProfit: 40_000_000,
+      currency: "COP",
+    });
+    await finance.upsertBudget(partnerA, {
+      month,
+      projectedRevenue: 90_000_000,
+      budgetExpenses: 12_000_000,
+      targetProfit: 45_000_000,
+      currency: "COP",
+    });
+
+    const budget = await finance.getBudget(partnerA, month);
+    expect(budget).not.toBeNull();
+    expect(budget!.projectedRevenue).toBe(90_000_000);
+    expect(budget!.targetProfit).toBe(45_000_000);
+
+    const { and, eq } = await import("drizzle-orm");
+    const rows = await db
+      .select()
+      .from(schema.budgetProjections)
+      .where(
+        and(
+          eq(schema.budgetProjections.partnerId, partnerA),
+          eq(schema.budgetProjections.month, `${month}-01`),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+  });
+
+  it("returns the collections calendar for a month, any status", async () => {
+    const ids = await Promise.all([
+      finance.createInvoice(partnerA, {
+        clientName: "Mayo pendiente", amount: 100, currency: "COP",
+        status: "pendiente", kind: "proyecto", issuedAt: "2031-04-20", dueDate: "2031-05-10",
+      }),
+      finance.createInvoice(partnerA, {
+        clientName: "Mayo pagada", amount: 200, currency: "COP",
+        status: "pagado", kind: "proyecto", issuedAt: "2031-04-20", dueDate: "2031-05-25",
+      }),
+      finance.createInvoice(partnerA, {
+        clientName: "Junio", amount: 300, currency: "COP",
+        status: "pendiente", kind: "proyecto", issuedAt: "2031-04-20", dueDate: "2031-06-02",
+      }),
+    ]);
+
+    const calendar = await finance.getCollectionsCalendar(partnerA, "2031-05");
+    expect(calendar.map((c) => c.clientName).sort()).toEqual([
+      "Mayo pagada",
+      "Mayo pendiente",
+    ]);
+    // Con due_date futuro respecto a now, la pendiente sigue pendiente.
+    expect(
+      calendar.find((c) => c.clientName === "Mayo pendiente")!.effectiveStatus,
+    ).toBe("pendiente");
+
+    for (const id of ids) await finance.deleteInvoice(partnerA, id);
+  });
+
+  it("computes the 70/30 rule over paid invoices of the window", async () => {
+    const mk = (kind: "proyecto" | "asesoria_mensual", amount: number) =>
+      finance.createInvoice(partnerB, {
+        clientName: `70/30 ${kind} ${amount}`,
+        amount,
+        currency: "EUR",
+        status: "pagado",
+        kind,
+        issuedAt: isoDay(-5),
+      });
+    const ids = await Promise.all([
+      mk("proyecto", 600),
+      mk("asesoria_mensual", 400),
+    ]);
+
+    const result = await finance.getSeventyThirty(partnerB, "EUR");
+    expect(result.totalPaid).toBe(1000);
+    expect(result.recurringPaid).toBe(400);
+    expect(result.recurringPct).toBeCloseTo(0.4);
+    expect(result.breached).toBe(true); // 40% > 30%
+
+    for (const id of ids) await finance.deleteInvoice(partnerB, id);
+
+    // Sin facturas pagadas: 0% y sin brecha (nunca división por cero).
+    const empty = await finance.getSeventyThirty(partnerB, "COP");
+    expect(empty.recurringPct).toBe(0);
+    expect(empty.breached).toBe(false);
+  });
+
+  it("computes monthly goal progress from the budget (25% case)", async () => {
+    const month = "2031-08";
+    await finance.upsertBudget(partnerA, {
+      month,
+      projectedRevenue: 80_000_000,
+      budgetExpenses: 0,
+      targetProfit: 40_000_000,
+      currency: "COP",
+    });
+    const id = await finance.createInvoice(partnerA, {
+      clientName: "Meta agosto",
+      amount: 20_000_000,
+      currency: "COP",
+      status: "pendiente",
+      kind: "proyecto",
+      issuedAt: `${month}-01`,
+    });
+    await finance.markInvoicePaid(partnerA, id, new Date("2031-08-15T12:00:00Z"));
+
+    const goal = await finance.getMonthlyGoalProgress(partnerA, "COP", month);
+    expect(goal).not.toBeNull();
+    expect(goal!.revenueGoal).toBe(80_000_000);
+    expect(goal!.revenueActual).toBe(20_000_000);
+    expect(goal!.revenuePct).toBe(25);
+    expect(goal!.profitGoal).toBe(40_000_000);
+    expect(goal!.profitPct).toBe(50); // profit = revenue (sin gastos del mes)
+
+    // Sin presupuesto para el mes → null (la UI muestra el CTA).
+    expect(await finance.getMonthlyGoalProgress(partnerA, "COP", "2031-09")).toBeNull();
+    // Presupuesto en otra moneda → null (nunca mezclar monedas).
+    expect(await finance.getMonthlyGoalProgress(partnerA, "EUR", month)).toBeNull();
+
+    await finance.deleteInvoice(partnerA, id);
+  });
 });

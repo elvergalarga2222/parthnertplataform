@@ -22,7 +22,7 @@ const inputClass =
 const labelClass =
   "flex flex-col gap-1.5 text-[12px] font-medium text-ink-secondary";
 
-import Modal from "./Modal";
+import Modal from "@/components/system/Modal";
 
 export default function DealFormModal({
   mode,

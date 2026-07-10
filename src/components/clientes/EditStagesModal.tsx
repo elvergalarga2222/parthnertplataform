@@ -15,7 +15,7 @@ import {
 } from "@/modules/crm/actions";
 import type { RunAction } from "./ClientesView";
 import { STAGE_COLORS } from "./stage-colors";
-import Modal from "./Modal";
+import Modal from "@/components/system/Modal";
 
 export default function EditStagesModal({
   stages,

@@ -192,19 +192,10 @@ export async function getTeam(): Promise<TeamMember[]> {
   ];
 }
 
-// Currency-aware money formatter. Uses Intl so COP/USD/EUR each render with the
-// right symbol; there is no conversion — the value is already in `currency`.
-export function formatMoney(value: number, currency = "EUR"): string {
-  try {
-    return new Intl.NumberFormat("es-ES", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: 0,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString("es-ES")} ${currency}`;
-  }
-}
+// Currency-aware money formatter — implementation lives in src/lib/format.ts
+// (single source since PR-4b); re-exported here for the existing dashboard
+// imports until PR-11 unifies them.
+export { formatMoney } from "@/lib/format";
 
 export function formatEuro(value: number): string {
   return `€${value.toLocaleString("es-ES")}`;
