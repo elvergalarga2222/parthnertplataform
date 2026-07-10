@@ -96,6 +96,18 @@ export async function deleteStageAction(stageId: string): Promise<ActionResult> 
 // ---------------------------------------------------------------------------
 // Deals
 
+// `.datetime()` no acota el año: Postgres acepta hasta el año 294276 pero
+// JavaScript devuelve Invalid Date fuera de su rango, y esa fila envenena el
+// render de /clientes para siempre (RangeError al serializar). Rango útil de
+// negocio: [1970, 2100].
+const safeActivityAt = z
+  .string()
+  .datetime()
+  .refine((value) => {
+    const year = new Date(value).getUTCFullYear();
+    return year >= 1970 && year <= 2100;
+  }, "La fecha no es válida.");
+
 const dealSchema = z.object({
   title: z.string().trim().min(1, "El título es obligatorio.").max(120),
   value: z.number().min(0),
@@ -104,7 +116,7 @@ const dealSchema = z.object({
   contactId: z.string().uuid().nullish(),
   fit: z.enum(FIT_LEVELS).nullish(),
   nextActivity: z.string().trim().max(160).nullish(),
-  nextActivityAt: z.string().datetime().nullish(),
+  nextActivityAt: safeActivityAt.nullish(),
   newCompanyName: z.string().trim().max(80).nullish(),
   newContactName: z.string().trim().max(80).nullish(),
 });
@@ -148,7 +160,7 @@ const dealPatchSchema = z.object({
   value: z.number().min(0).optional(),
   fit: z.enum(FIT_LEVELS).nullish(),
   nextActivity: z.string().trim().max(160).nullish(),
-  nextActivityAt: z.string().datetime().nullish(),
+  nextActivityAt: safeActivityAt.nullish(),
 });
 
 export async function updateDealAction(

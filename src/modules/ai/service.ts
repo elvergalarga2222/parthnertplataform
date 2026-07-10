@@ -7,6 +7,7 @@ import {
   aiUsageLimits,
   workspaces,
 } from "@/db/schema";
+import { toIsoOrEpoch } from "@/lib/dates";
 import { getRedis } from "@/lib/redis";
 import { logger } from "@/lib/logger";
 import { decryptSecret, encryptSecret, keyHint } from "./crypto";
@@ -345,7 +346,7 @@ export async function generate(
     tokensInput: row.tokensInput,
     tokensOutput: row.tokensOutput,
     costUsd,
-    createdAt: row.createdAt.toISOString(),
+    createdAt: toIsoOrEpoch(row.createdAt),
   };
 }
 
@@ -378,6 +379,6 @@ export async function getRecentGenerations(
     tokensInput: r.tokensInput,
     tokensOutput: r.tokensOutput,
     costUsd: Number(r.costUsd),
-    createdAt: r.createdAt.toISOString(),
+    createdAt: toIsoOrEpoch(r.createdAt),
   }));
 }

@@ -148,6 +148,58 @@ describe.skipIf(!hasDb)("crm service (integration)", () => {
     await crm.deleteDeal(partnerA, dealId);
   });
 
+  it("survives a poisoned next_activity_at instead of crashing the snapshot", async () => {
+    // Regresión del digest 4159151474: un timestamptz que JavaScript no puede
+    // representar ('infinity', años BC o > 275760) llega del driver como
+    // Invalid Date y .toISOString() lanzaba RangeError en cada render de
+    // /clientes. El CHECK de la migración 0007 ya impide insertarlo por la vía
+    // normal, así que se recrea el estado pre-migración soltando la constraint
+    // temporalmente (mismo dato envenenado que había en producción).
+    const { sql } = await import("drizzle-orm");
+    const snapshot = await crm.getCrmSnapshot(partnerA);
+    const dealId = await crm.createDeal(partnerA, {
+      title: "Deal envenenado",
+      value: 1,
+      stageId: snapshot.stages[0].id,
+    });
+
+    await db.execute(
+      sql`ALTER TABLE deals DROP CONSTRAINT deals_next_activity_at_range_check`,
+    );
+    try {
+      await db.execute(
+        sql`UPDATE deals SET next_activity_at = 'infinity' WHERE id = ${dealId}`,
+      );
+      const after = await crm.getCrmSnapshot(partnerA);
+      const poisoned = after.deals.find((d) => d.id === dealId);
+      expect(poisoned).toBeDefined();
+      expect(poisoned!.nextActivityAt).toBeNull();
+    } finally {
+      await db.execute(
+        sql`UPDATE deals SET next_activity_at = NULL WHERE id = ${dealId}`,
+      );
+      await db.execute(
+        sql`ALTER TABLE deals ADD CONSTRAINT deals_next_activity_at_range_check
+            CHECK (next_activity_at IS NULL
+                   OR (next_activity_at >= '1900-01-01' AND next_activity_at < '2200-01-01'))`,
+      );
+      await crm.deleteDeal(partnerA, dealId);
+    }
+  });
+
+  it("rejects an out-of-range next_activity_at at the database level", async () => {
+    const snapshot = await crm.getCrmSnapshot(partnerA);
+    await expect(
+      crm.createDeal(partnerA, {
+        title: "Deal con fecha imposible",
+        value: 1,
+        stageId: snapshot.stages[0].id,
+        // Año 20260 — el dedazo típico en el <input type="date">.
+        nextActivityAt: new Date("+020260-07-10T09:00:00.000Z"),
+      }),
+    ).rejects.toThrow();
+  });
+
   it("custom field values are scoped to the owning partner", async () => {
     const field = await crm.createCustomField(partnerA, {
       entity: "deal",

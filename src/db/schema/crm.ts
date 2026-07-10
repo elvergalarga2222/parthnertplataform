@@ -131,6 +131,12 @@ export const deals = pgTable(
       "deals_fit_check",
       sql`${table.fit} IS NULL OR ${table.fit} IN ('bajo', 'medio', 'bueno', 'excelente')`,
     ),
+    // Postgres acepta timestamps (año 294276, 'infinity') que JavaScript no
+    // puede representar; una fila así envenena el render de /clientes.
+    check(
+      "deals_next_activity_at_range_check",
+      sql`${table.nextActivityAt} IS NULL OR (${table.nextActivityAt} >= '1900-01-01' AND ${table.nextActivityAt} < '2200-01-01')`,
+    ),
   ],
 );
 
