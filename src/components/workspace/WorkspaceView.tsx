@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Columns3, Plus } from "lucide-react";
+import { ArrowLeft, Columns3, FileDown, Plus } from "lucide-react";
 import type {
   WorkspaceCardView,
   WorkspaceSnapshot,
@@ -18,6 +18,7 @@ import { WORKSPACE_STATUSES } from "@/modules/workspace/types";
 import WorkspaceKanban from "./WorkspaceKanban";
 import WorkspaceProfileForm from "./WorkspaceProfileForm";
 import ColumnsModal from "./ColumnsModal";
+import StrategyDocSection from "./StrategyDocSection";
 import AiPanel from "./ai/AiPanel";
 import CardFormModal from "./CardFormModal";
 import SopPanel from "./SopPanel";
@@ -156,6 +157,13 @@ export default function WorkspaceView({
           </button>
         </div>
 
+        <Link
+          href={`/espacios/${data.id}/exportar`}
+          className="flex items-center gap-1.5 rounded-xl border border-edge bg-surface px-3.5 py-2 text-[12.5px] font-semibold text-ink-secondary transition-colors duration-150 hover:border-primary/50 hover:text-primary-soft"
+        >
+          <FileDown size={14} /> Exportar
+        </Link>
+
         {tab === "kanban" && (
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -193,11 +201,19 @@ export default function WorkspaceView({
         )}
 
         {tab === "ficha" && (
-          <WorkspaceProfileForm
-            workspaceId={data.id}
-            profile={data.profile}
-            runAction={runAction}
-          />
+          <div className="flex flex-col gap-5 overflow-y-auto pb-6">
+            <WorkspaceProfileForm
+              workspaceId={data.id}
+              profile={data.profile}
+              runAction={runAction}
+            />
+            <StrategyDocSection
+              workspaceId={data.id}
+              strategyDoc={data.profile.strategyDoc}
+              latestStrategyGeneration={data.latestStrategyGeneration}
+              runAction={runAction}
+            />
+          </div>
         )}
 
         {tab === "ia" && <AiPanel workspaceId={data.id} />}

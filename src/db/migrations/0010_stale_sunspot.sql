@@ -1,0 +1,1 @@
+ALTER TABLE "workspace_profiles" ADD COLUMN "strategy_doc" text;

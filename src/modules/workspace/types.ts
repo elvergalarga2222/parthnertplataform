@@ -37,6 +37,8 @@ export interface WorkspaceProfileView {
   contactEmail: string | null;
   contactPhone: string | null;
   notes: string | null;
+  /** Documento vivo de estrategia (texto/markdown ligero). */
+  strategyDoc: string | null;
   extra: Record<string, string>;
 }
 
@@ -48,4 +50,37 @@ export interface WorkspaceSnapshot {
   columns: WorkspaceColumnView[];
   cards: WorkspaceCardView[];
   profile: WorkspaceProfileView;
+  /** Última generación IA de tipo 'estrategia' del workspace (para sembrar el doc). */
+  latestStrategyGeneration: { outputText: string; createdAt: string } | null;
+}
+
+// --- Export (PR-13) ----------------------------------------------------------
+
+export interface WorkspaceExportGeneration {
+  type: string;
+  outputText: string;
+  createdAt: string;
+}
+
+export interface WorkspaceExportColumn {
+  name: string;
+  sopContent: string | null;
+  cards: {
+    title: string;
+    description: string | null;
+    assignee: string | null;
+    dueDate: string | null;
+  }[];
+}
+
+export interface WorkspaceExport {
+  id: string;
+  clientName: string;
+  status: WorkspaceStatus;
+  exportedAt: string;
+  deal: { title: string; value: number; currency: string } | null;
+  profile: WorkspaceProfileView;
+  columns: WorkspaceExportColumn[];
+  /** Última generación por tipo (guion/estrategia/diagnostico). */
+  latestGenerations: WorkspaceExportGeneration[];
 }

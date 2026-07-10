@@ -24,24 +24,6 @@ export interface Kpi {
     | { kind: "funnel"; stages: PipelineStage[]; dealsOpen: number };
 }
 
-export type OpportunityStatus =
-  | "Descubrimiento"
-  | "Propuesta"
-  | "Negociación"
-  | "Cierre";
-
-export interface Opportunity {
-  id: string;
-  company: string;
-  companyInitial: string;
-  title: string;
-  amount: number;
-  ownerName: string;
-  ownerRole: string;
-  status: OpportunityStatus;
-  accent: string;
-}
-
 export interface DashboardTask {
   id: string;
   title: string;
@@ -49,15 +31,6 @@ export interface DashboardTask {
   done: boolean;
 }
 
-export interface WeeklyIncome {
-  week: string;
-  amount: number;
-}
-
-export interface QuarterGoal {
-  pct: number;
-  label: string;
-}
 
 export interface TeamMember {
   name: string;

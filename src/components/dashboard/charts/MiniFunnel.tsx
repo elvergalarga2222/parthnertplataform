@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { PipelineStage } from "@/modules/dashboard/types";
-import { formatMoney } from "@/modules/dashboard/data";
+import { formatMoney } from "@/lib/format";
 
 // Rampa secuencial de un solo tono (etapas ordenadas del pipeline),
 // con etiqueta directa por etapa — la identidad nunca depende solo del color.

@@ -1,17 +1,16 @@
 import {
   getMonthlyProfit,
   getMonthlyRevenue,
-  getPipelineOpen,
   isCurrency,
 } from "@/modules/finance/service";
 import type { Currency } from "@/modules/finance/types";
 import type { Kpi } from "./types";
 
-// Dashboard composition layer: assembles the 3 real KPI cards (Facturación,
-// Profit, Pipeline) from the finance module, denominated in the partner's
-// default currency. Kept out of finance/ so that domain module stays free of
-// presentation types (CLAUDE.md: los módulos no se importan entre sí; el
-// dashboard es la capa de composición que sí lee de finance/crm).
+// Dashboard composition layer: assembles the 2 real KPI cards (Facturación,
+// Profit) from the finance module, denominated in the partner's default
+// currency. El pipeline salió del dashboard por decisión de producto
+// (feedback Kenny, PR-11): vive completo en /clientes. Kept out of finance/
+// so that domain module stays free of presentation types.
 
 const MONTH_ABBR = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -59,10 +58,9 @@ export async function getDashboardKpis(
     ? partner.defaultCurrency
     : "USD";
 
-  const [revenueRows, profitRows, pipeline] = await Promise.all([
+  const [revenueRows, profitRows] = await Promise.all([
     getMonthlyRevenue(partner.id, currency),
     getMonthlyProfit(partner.id, currency),
-    getPipelineOpen(partner.id, currency),
   ]);
 
   const months = recentMonths(6, now);
@@ -103,19 +101,6 @@ export async function getDashboardKpis(
       momLabel: `vs. ${prevLabel}`,
       footnote: "Ingresos menos gastos y costo de IA del mes",
       chart: { kind: "bars", points: profitPoints },
-    },
-    {
-      id: "pipeline",
-      title: "Pipeline Abierto",
-      value: pipeline.total,
-      currency,
-      momPct: 0,
-      momLabel: "negocios en curso",
-      chart: {
-        kind: "funnel",
-        dealsOpen: pipeline.dealsOpen,
-        stages: pipeline.stages,
-      },
     },
   ];
 }

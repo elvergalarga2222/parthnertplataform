@@ -68,7 +68,8 @@ async function main() {
     .values(
       [
         { name: "Descubrimiento", color: "purple" },
-        { name: "Propuesta", color: "violet" },
+        // Gate de brief: clientes nuevos necesitan diagnóstico para entrar.
+        { name: "Propuesta", color: "violet", requiresBrief: true },
         { name: "Negociación", color: "teal" },
         { name: "Cerrado Ganado", color: "green", isWon: true },
       ].map((s, i) => ({ ...s, partnerId, position: i })),
@@ -140,6 +141,8 @@ async function main() {
       fit: "excelente",
       nextActivity: "Llamada de cierre con dirección",
       nextActivityAt: at(0),
+      brief:
+        "Cliente nuevo del sector tech. Objetivo: plataforma integral con IA para operaciones. Presupuesto aprobado por dirección; decisor: Leonardo.",
     },
     {
       title: "Consultoría Cloud Pro",
@@ -160,6 +163,8 @@ async function main() {
       fit: "bueno",
       nextActivity: "Demo con el equipo médico",
       nextActivityAt: at(-1),
+      brief:
+        "Clínica con 3 sedes; agenda hoy en papel y WhatsApp. Objetivo: sistema de citas digital con recordatorios. Sensibles al precio.",
     },
     {
       title: "Consultoría Transformación Digital",
@@ -201,6 +206,7 @@ async function main() {
         fit: seed.fit,
         nextActivity: seed.nextActivity,
         nextActivityAt: seed.nextActivityAt,
+        brief: "brief" in seed ? seed.brief : null,
         position,
       })
       .returning();
@@ -376,6 +382,21 @@ async function seedWorkspaceDemo(partnerId: string) {
         "1. Revisar el brief del cliente y accesos.\n2. Priorizar tareas de mayor impacto en facturación.\n3. Toda tarea debe tener responsable y fecha antes de pasar a «En proceso».",
     })
     .where(eq(kanbanColumns.id, cols[0].id));
+
+  // Estrategia demo para el export (idempotente: solo si sigue vacía).
+  await db
+    .update(workspaceProfiles)
+    .set({
+      strategyDoc:
+        "# Estrategia de crecimiento\n\nObjetivo: duplicar la facturación mensual del cliente en 6 meses apoyándose en contenido orgánico y automatización comercial.\n\n## Fases\n- Auditoría de presencia digital y embudo actual\n- Implementación de píxel, analítica y CRM\n- Plan de contenidos mes a mes con foco en **video corto**\n\n## Métricas clave\n- Leads calificados por semana\n- Tasa de cierre del pipeline\n- Costo por adquisición",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(workspaceProfiles.workspaceId, emptyWs.id),
+        isNull(workspaceProfiles.strategyDoc),
+      ),
+    );
 
   console.log("Workspace demo cards + SOP seeded.");
 }

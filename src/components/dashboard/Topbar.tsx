@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Bell, Clock, Mail, Search } from "lucide-react";
 import type { InvoiceAlert, InvoiceAlerts } from "@/modules/finance/types";
-import { formatMoney } from "@/modules/dashboard/data";
+import { formatMoney } from "@/lib/format";
 
 const EMPTY_ALERTS: InvoiceAlerts = { overdue: [], upcoming: [], total: 0 };
 

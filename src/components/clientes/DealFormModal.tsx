@@ -52,6 +52,10 @@ export default function DealFormModal({
     deal?.nextActivityAt ? deal.nextActivityAt.slice(0, 10) : "",
   );
   const [dateError, setDateError] = useState<string | null>(null);
+  const [brief, setBrief] = useState(deal?.brief ?? "");
+  const [showBrief, setShowBrief] = useState(Boolean(deal?.brief));
+
+  const briefPending = (deal?.isNewClient ?? true) && !brief.trim();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +88,7 @@ export default function DealFormModal({
             fit: fit || null,
             nextActivity: nextActivity || null,
             nextActivityAt: activityAt,
+            brief: brief.trim() || null,
           }),
       );
     } else if (deal) {
@@ -99,6 +104,7 @@ export default function DealFormModal({
                   fit: fit || null,
                   nextActivity: nextActivity || null,
                   nextActivityAt: activityAt,
+                  brief: brief.trim() || null,
                 }
               : x,
           ),
@@ -111,6 +117,7 @@ export default function DealFormModal({
             fit: fit || null,
             nextActivity: nextActivity || null,
             nextActivityAt: activityAt,
+            brief: brief.trim() || null,
           }),
       );
     }
@@ -153,6 +160,17 @@ export default function DealFormModal({
       onClose={onClose}
       wide
     >
+      <div className="mb-3 -mt-1">
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold ${
+            briefPending
+              ? "bg-amber-400/15 text-amber-300"
+              : "bg-positive/15 text-positive"
+          }`}
+        >
+          {briefPending ? "Brief pendiente" : "Brief completo"}
+        </span>
+      </div>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className={labelClass}>
@@ -294,6 +312,26 @@ export default function DealFormModal({
               </span>
             )}
           </label>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setShowBrief((v) => !v)}
+            className="self-start text-[12px] font-semibold text-primary-soft transition-colors hover:text-primary"
+          >
+            {showBrief ? "▾" : "▸"} Diagnóstico / Brief
+          </button>
+          {showBrief && (
+            <textarea
+              value={brief}
+              onChange={(e) => setBrief(e.target.value)}
+              rows={5}
+              maxLength={8000}
+              placeholder="Contexto, objetivos, situación actual del cliente…"
+              className={`${inputClass} resize-y`}
+            />
+          )}
         </div>
 
         {mode === "edit" && deal && data.customFields.length > 0 && (

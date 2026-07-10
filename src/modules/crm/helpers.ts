@@ -13,6 +13,34 @@ export function slugifyFieldKey(label: string): string {
     .slice(0, 60);
 }
 
+export interface ClientKey {
+  id: string;
+  companyId: string | null;
+  contactId: string | null;
+}
+
+/**
+ * "Cliente nuevo" (gate de brief, PR-12 §2.2a): el deal cuya empresa (o
+ * contacto, si no hay empresa) no tiene ningún OTRO deal ya ganado del mismo
+ * partner. Sin empresa ni contacto se trata como nuevo (conservador).
+ * `wonDeals` son los deals del partner en etapas is_won.
+ */
+export function isNewClient(deal: ClientKey, wonDeals: ClientKey[]): boolean {
+  const others = wonDeals.filter((w) => w.id !== deal.id);
+  if (deal.companyId) {
+    return !others.some((w) => w.companyId === deal.companyId);
+  }
+  if (deal.contactId) {
+    return !others.some((w) => w.contactId === deal.contactId);
+  }
+  return true;
+}
+
+/** ¿El deal tiene brief utilizable? (null/whitespace = no). */
+export function hasBrief(brief: string | null | undefined): boolean {
+  return Boolean(brief && brief.trim().length > 0);
+}
+
 export function formatMoney(value: number, currency = "EUR"): string {
   return new Intl.NumberFormat("es-ES", {
     style: "currency",

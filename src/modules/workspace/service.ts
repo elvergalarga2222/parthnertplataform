@@ -1,6 +1,7 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  aiGenerations,
   deals,
   kanbanCards,
   kanbanColumns,
@@ -11,6 +12,8 @@ import { toIsoOrEpoch } from "@/lib/dates";
 import type {
   WorkspaceCardView,
   WorkspaceColumnView,
+  WorkspaceExport,
+  WorkspaceExportGeneration,
   WorkspaceListItem,
   WorkspaceProfileView,
   WorkspaceSnapshot,
@@ -118,14 +121,149 @@ export async function getWorkspaceSnapshot(
         position: c.position,
       }),
     ),
-    profile: {
-      businessName: profile.businessName,
-      industry: profile.industry,
-      contactEmail: profile.contactEmail,
-      contactPhone: profile.contactPhone,
-      notes: profile.notes,
-      extra: (profile.extra as Record<string, string>) ?? {},
-    },
+    profile: toProfileView(profile),
+    latestStrategyGeneration: await getLatestStrategyGeneration(
+      partnerId,
+      workspaceId,
+    ),
+  };
+}
+
+function toProfileView(
+  profile: typeof workspaceProfiles.$inferSelect,
+): WorkspaceProfileView {
+  return {
+    businessName: profile.businessName,
+    industry: profile.industry,
+    contactEmail: profile.contactEmail,
+    contactPhone: profile.contactPhone,
+    notes: profile.notes,
+    strategyDoc: profile.strategyDoc,
+    extra: (profile.extra as Record<string, string>) ?? {},
+  };
+}
+
+// El módulo workspace lee la TABLA ai_generations desde @/db/schema (precedente:
+// finance lee deals) — no importa código del módulo ai.
+async function getLatestStrategyGeneration(
+  partnerId: string,
+  workspaceId: string,
+): Promise<{ outputText: string; createdAt: string } | null> {
+  const [row] = await db
+    .select({
+      outputText: aiGenerations.outputText,
+      createdAt: aiGenerations.createdAt,
+    })
+    .from(aiGenerations)
+    .where(
+      and(
+        eq(aiGenerations.partnerId, partnerId),
+        eq(aiGenerations.workspaceId, workspaceId),
+        eq(aiGenerations.type, "estrategia"),
+      ),
+    )
+    .orderBy(desc(aiGenerations.createdAt))
+    .limit(1);
+  if (!row?.outputText) return null;
+  return { outputText: row.outputText, createdAt: toIsoOrEpoch(row.createdAt) };
+}
+
+/**
+ * Todos los datos del documento exportable de un workspace en un solo objeto:
+ * perfil + estrategia, plan de trabajo (columnas con SOP y tarjetas), deal de
+ * origen y la última generación IA por tipo. Cross-tenant ⇒ "no encontrado".
+ */
+export async function getWorkspaceExportData(
+  partnerId: string,
+  workspaceId: string,
+): Promise<WorkspaceExport> {
+  const ws = await requireWorkspace(partnerId, workspaceId);
+
+  const [columnRows, cardRows, profileRows, dealRows, generationRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(kanbanColumns)
+        .where(eq(kanbanColumns.workspaceId, workspaceId))
+        .orderBy(asc(kanbanColumns.position), asc(kanbanColumns.createdAt)),
+      db
+        .select()
+        .from(kanbanCards)
+        .where(eq(kanbanCards.workspaceId, workspaceId))
+        .orderBy(asc(kanbanCards.position), asc(kanbanCards.createdAt)),
+      db
+        .select()
+        .from(workspaceProfiles)
+        .where(eq(workspaceProfiles.workspaceId, workspaceId)),
+      ws.dealId
+        ? db
+            .select({ title: deals.title, value: deals.value, currency: deals.currency })
+            .from(deals)
+            .where(and(eq(deals.id, ws.dealId), eq(deals.partnerId, partnerId)))
+        : Promise.resolve([]),
+      db
+        .select({
+          type: aiGenerations.type,
+          outputText: aiGenerations.outputText,
+          createdAt: aiGenerations.createdAt,
+        })
+        .from(aiGenerations)
+        .where(
+          and(
+            eq(aiGenerations.partnerId, partnerId),
+            eq(aiGenerations.workspaceId, workspaceId),
+          ),
+        )
+        .orderBy(desc(aiGenerations.createdAt))
+        .limit(50),
+    ]);
+
+  // Última generación por tipo (el query ya viene ordenado desc).
+  const latestByType = new Map<string, WorkspaceExportGeneration>();
+  for (const g of generationRows) {
+    if (!latestByType.has(g.type)) {
+      latestByType.set(g.type, {
+        type: g.type,
+        outputText: g.outputText ?? "",
+        createdAt: toIsoOrEpoch(g.createdAt),
+      });
+    }
+  }
+
+  const profile = profileRows[0];
+  const [deal] = dealRows;
+  return {
+    id: ws.id,
+    clientName: ws.clientName,
+    status: ws.status as WorkspaceStatus,
+    exportedAt: new Date().toISOString(),
+    deal: deal
+      ? { title: deal.title, value: Number(deal.value), currency: deal.currency }
+      : null,
+    profile: profile
+      ? toProfileView(profile)
+      : {
+          businessName: null,
+          industry: null,
+          contactEmail: null,
+          contactPhone: null,
+          notes: null,
+          strategyDoc: null,
+          extra: {},
+        },
+    columns: columnRows.map((c) => ({
+      name: c.name,
+      sopContent: c.sopContent,
+      cards: cardRows
+        .filter((card) => card.columnId === c.id)
+        .map((card) => ({
+          title: card.title,
+          description: card.description,
+          assignee: card.assignee,
+          dueDate: card.dueDate,
+        })),
+    })),
+    latestGenerations: Array.from(latestByType.values()),
   };
 }
 

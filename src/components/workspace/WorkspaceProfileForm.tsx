@@ -45,6 +45,8 @@ export default function WorkspaceProfileForm({
       contactEmail: contactEmail || null,
       contactPhone: contactPhone || null,
       notes: notes || null,
+      // La estrategia se edita en su propia sección; aquí se preserva.
+      strategyDoc: profile.strategyDoc,
       extra,
     };
     await runAction(

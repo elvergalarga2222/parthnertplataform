@@ -1,12 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import type { WeeklyIncome } from "@/modules/dashboard/types";
-import { formatEuro } from "@/modules/dashboard/data";
+import type { WeeklyRevenue } from "@/modules/finance/service";
+import { formatMoney } from "@/lib/format";
 
-export default function WeeklyIncomeChart({ data }: { data: WeeklyIncome[] }) {
+export default function WeeklyIncomeChart({
+  data,
+  currency,
+}: {
+  data: WeeklyRevenue[];
+  currency: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = Math.max(...data.map((d) => d.amount));
+  const max = Math.max(0, ...data.map((d) => d.amount));
+
+  if (data.length === 0 || max === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-edge-strong px-4 py-6 text-center text-[12px] text-ink-muted">
+        Sin cobros registrados este mes en {currency}.
+      </p>
+    );
+  }
+
   const best = data.reduce((a, b) => (b.amount > a.amount ? b : a));
 
   return (
@@ -31,7 +46,7 @@ export default function WeeklyIncomeChart({ data }: { data: WeeklyIncome[] }) {
                 onPointerLeave={() => setHover(null)}
                 onFocus={() => setHover(i)}
                 onBlur={() => setHover(null)}
-                aria-label={`${d.week}: ${formatEuro(d.amount)}`}
+                aria-label={`${d.week}: ${formatMoney(d.amount, currency)}`}
                 className="flex h-full flex-1 items-end"
               >
                 <span
@@ -62,7 +77,7 @@ export default function WeeklyIncomeChart({ data }: { data: WeeklyIncome[] }) {
         >
           <span className="text-ink-muted">{data[hover].week} · </span>
           <span className="font-semibold text-ink">
-            {formatEuro(data[hover].amount)}
+            {formatMoney(data[hover].amount, currency)}
           </span>
         </div>
       )}
