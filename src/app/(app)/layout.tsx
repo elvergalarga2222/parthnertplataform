@@ -26,11 +26,19 @@ export default async function AppLayout({
   const displayName = partner.displayName ?? partner.email;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-base text-ink">
-      <Sidebar team={team} logoutAction={logoutAction} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar displayName={displayName} alerts={alerts} />
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+    // Las variantes print: permiten que /espacios/[id]/exportar imprima el
+    // documento sin el chrome de la app y sin recortes por los overflow.
+    <div className="flex h-screen overflow-hidden bg-base text-ink print:block print:h-auto print:overflow-visible print:bg-white">
+      <div className="contents print:hidden">
+        <Sidebar team={team} logoutAction={logoutAction} />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col print:block">
+        <div className="contents print:hidden">
+          <Topbar displayName={displayName} alerts={alerts} />
+        </div>
+        <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
+          {children}
+        </main>
       </div>
     </div>
   );

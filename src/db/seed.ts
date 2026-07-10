@@ -383,6 +383,21 @@ async function seedWorkspaceDemo(partnerId: string) {
     })
     .where(eq(kanbanColumns.id, cols[0].id));
 
+  // Estrategia demo para el export (idempotente: solo si sigue vacía).
+  await db
+    .update(workspaceProfiles)
+    .set({
+      strategyDoc:
+        "# Estrategia de crecimiento\n\nObjetivo: duplicar la facturación mensual del cliente en 6 meses apoyándose en contenido orgánico y automatización comercial.\n\n## Fases\n- Auditoría de presencia digital y embudo actual\n- Implementación de píxel, analítica y CRM\n- Plan de contenidos mes a mes con foco en **video corto**\n\n## Métricas clave\n- Leads calificados por semana\n- Tasa de cierre del pipeline\n- Costo por adquisición",
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(workspaceProfiles.workspaceId, emptyWs.id),
+        isNull(workspaceProfiles.strategyDoc),
+      ),
+    );
+
   console.log("Workspace demo cards + SOP seeded.");
 }
 

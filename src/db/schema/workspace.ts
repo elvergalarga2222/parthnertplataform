@@ -57,6 +57,9 @@ export const workspaceProfiles = pgTable("workspace_profiles", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   notes: text("notes"),
+  // Documento vivo de estrategia del cliente (texto/markdown ligero). Fuente
+  // principal del export; se puede sembrar desde la última generación de IA.
+  strategyDoc: text("strategy_doc"),
   extra: jsonb("extra").notNull().default(sql`'{}'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

@@ -59,6 +59,7 @@ const profileSchema = z.object({
   contactEmail: z.string().trim().max(160).nullish(),
   contactPhone: z.string().trim().max(40).nullish(),
   notes: z.string().trim().max(4000).nullish(),
+  strategyDoc: z.string().trim().max(50_000).nullish(),
   extra: z.record(z.string(), z.string().max(500)).optional(),
 });
 
