@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2, Trophy } from "lucide-react";
+import { ArrowDown, ArrowUp, ClipboardCheck, Plus, Trash2, Trophy } from "lucide-react";
 import {
   STAGE_COLOR_NAMES,
   type StageColorName,
@@ -42,6 +42,21 @@ export default function EditStagesModal({
       () => updateStageAction({ stageId: stage.id, name: trimmed }),
     );
   };
+
+  const toggleBrief = (stage: StageView) =>
+    runAction(
+      (d) => ({
+        ...d,
+        stages: d.stages.map((s) =>
+          s.id === stage.id ? { ...s, requiresBrief: !s.requiresBrief } : s,
+        ),
+      }),
+      () =>
+        updateStageAction({
+          stageId: stage.id,
+          requiresBrief: !stage.requiresBrief,
+        }),
+    );
 
   const recolor = (stage: StageView, color: StageColorName) =>
     runAction(
@@ -132,6 +147,23 @@ export default function EditStagesModal({
                 <Trophy size={10} /> Ganado
               </span>
             )}
+            <button
+              type="button"
+              title={
+                stage.requiresBrief
+                  ? "Requiere brief para entrar (clientes nuevos) — clic para desactivar"
+                  : "No requiere brief — clic para exigirlo a clientes nuevos"
+              }
+              aria-pressed={stage.requiresBrief}
+              onClick={() => toggleBrief(stage)}
+              className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                stage.requiresBrief
+                  ? "bg-amber-400/15 text-amber-300"
+                  : "bg-surface-3 text-ink-muted hover:text-ink-secondary"
+              }`}
+            >
+              <ClipboardCheck size={10} /> Brief
+            </button>
             <select
               value={stage.color}
               aria-label={`Color de la etapa ${stage.name}`}

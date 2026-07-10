@@ -64,6 +64,13 @@
       "when": 1783665156281,
       "tag": "0008_aspiring_omega_red",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783691220694,
+      "tag": "0009_familiar_red_skull",
+      "breakpoints": true
     }
   ]
 }

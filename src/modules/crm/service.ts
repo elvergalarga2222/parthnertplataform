@@ -10,7 +10,8 @@ import {
   pipelineStages,
 } from "@/db/schema";
 import { toIsoOrEpoch, toIsoOrNull } from "@/lib/dates";
-import { slugifyFieldKey } from "./helpers";
+import { hasBrief, isNewClient, slugifyFieldKey } from "./helpers";
+import type { ClientKey } from "./helpers";
 import type {
   CrmSnapshot,
   CustomFieldView,
@@ -28,13 +29,19 @@ import type {
 
 export class CrmError extends Error {}
 
-const DEFAULT_STAGES: { name: string; color: StageColorName; isWon?: boolean }[] =
-  [
-    { name: "Descubrimiento", color: "purple" },
-    { name: "Propuesta", color: "violet" },
-    { name: "Negociación", color: "teal" },
-    { name: "Cerrado Ganado", color: "green", isWon: true },
-  ];
+const DEFAULT_STAGES: {
+  name: string;
+  color: StageColorName;
+  isWon?: boolean;
+  requiresBrief?: boolean;
+}[] = [
+  { name: "Descubrimiento", color: "purple" },
+  // Para avanzar de Descubrimiento a Propuesta, un cliente nuevo necesita
+  // brief. Solo aplica a pipelines creados desde cero (partners nuevos).
+  { name: "Propuesta", color: "violet", requiresBrief: true },
+  { name: "Negociación", color: "teal" },
+  { name: "Cerrado Ganado", color: "green", isWon: true },
+];
 
 /** Creates the default pipeline the first time a partner opens the module. */
 export async function ensureDefaultStages(partnerId: string): Promise<void> {
@@ -52,6 +59,7 @@ export async function ensureDefaultStages(partnerId: string): Promise<void> {
       color: stage.color,
       position: i,
       isWon: stage.isWon ?? false,
+      requiresBrief: stage.requiresBrief ?? false,
     })),
   );
 }
@@ -64,7 +72,43 @@ function toStageView(row: typeof pipelineStages.$inferSelect): StageView {
     position: row.position,
     isWon: row.isWon,
     isLost: row.isLost,
+    requiresBrief: row.requiresBrief,
   };
+}
+
+/**
+ * Deals del partner en etapas ganadas — la base para decidir si un cliente es
+ * nuevo (helpers.isNewClient). Un solo query, sin N+1.
+ */
+async function getWonDeals(
+  tx: Pick<typeof db, "select">,
+  partnerId: string,
+): Promise<ClientKey[]> {
+  return tx
+    .select({
+      id: deals.id,
+      companyId: deals.companyId,
+      contactId: deals.contactId,
+    })
+    .from(deals)
+    .innerJoin(pipelineStages, eq(deals.stageId, pipelineStages.id))
+    .where(and(eq(deals.partnerId, partnerId), eq(pipelineStages.isWon, true)));
+}
+
+/** Gate de brief: lanza si un cliente nuevo sin brief intenta entrar a la etapa. */
+async function assertBriefGate(
+  tx: Pick<typeof db, "select">,
+  partnerId: string,
+  targetStage: { requiresBrief: boolean },
+  deal: ClientKey & { brief: string | null },
+): Promise<void> {
+  if (!targetStage.requiresBrief || hasBrief(deal.brief)) return;
+  const wonDeals = await getWonDeals(tx, partnerId);
+  if (isNewClient(deal, wonDeals)) {
+    throw new CrmError(
+      "Este cliente es nuevo: completa el diagnóstico/brief del deal antes de pasarlo a esta etapa.",
+    );
+  }
 }
 
 export async function getCrmSnapshot(partnerId: string): Promise<CrmSnapshot> {
@@ -125,6 +169,16 @@ export async function getCrmSnapshot(partnerId: string): Promise<CrmSnapshot> {
     .where(eq(contacts.partnerId, partnerId))
     .orderBy(asc(contacts.fullName));
 
+  // Flags del gate de brief sin N+1: los deals ganados ya están en dealRows.
+  const wonStageIds = new Set(stageRows.filter((s) => s.isWon).map((s) => s.id));
+  const wonDeals: ClientKey[] = dealRows
+    .filter(({ deal }) => wonStageIds.has(deal.stageId))
+    .map(({ deal }) => ({
+      id: deal.id,
+      companyId: deal.companyId,
+      contactId: deal.contactId,
+    }));
+
   return {
     stages: stageRows.map(toStageView),
     deals: dealRows.map(({ deal, companyName, contactName }): DealView => ({
@@ -142,6 +196,8 @@ export async function getCrmSnapshot(partnerId: string): Promise<CrmSnapshot> {
       contactId: deal.contactId,
       contactName,
       createdAt: toIsoOrEpoch(deal.createdAt),
+      brief: deal.brief,
+      isNewClient: isNewClient(deal, wonDeals),
       custom: valuesByDeal.get(deal.id) ?? {},
     })),
     customFields: fieldRows.map(
@@ -184,7 +240,13 @@ export async function createStage(
 export async function updateStage(
   partnerId: string,
   stageId: string,
-  patch: { name?: string; color?: StageColorName; isWon?: boolean; isLost?: boolean },
+  patch: {
+    name?: string;
+    color?: StageColorName;
+    isWon?: boolean;
+    isLost?: boolean;
+    requiresBrief?: boolean;
+  },
 ): Promise<void> {
   const result = await db
     .update(pipelineStages)
@@ -294,10 +356,19 @@ export async function createDeal(
     fit?: FitLevel | null;
     nextActivity?: string | null;
     nextActivityAt?: Date | null;
+    brief?: string | null;
   },
 ): Promise<string> {
   return db.transaction(async (tx) => {
-    await requireStage(tx, partnerId, input.stageId);
+    const stage = await requireStage(tx, partnerId, input.stageId);
+    // El gate también aplica al crear directamente en una etapa con brief
+    // requerido (no entrar por la puerta de atrás).
+    await assertBriefGate(tx, partnerId, stage, {
+      id: "",
+      companyId: input.companyId ?? null,
+      contactId: input.contactId ?? null,
+      brief: input.brief ?? null,
+    });
 
     const siblings = await tx
       .select({ position: deals.position })
@@ -318,6 +389,7 @@ export async function createDeal(
         fit: input.fit ?? null,
         nextActivity: input.nextActivity ?? null,
         nextActivityAt: input.nextActivityAt ?? null,
+        brief: input.brief ?? null,
         position: nextPosition,
       })
       .returning({ id: deals.id });
@@ -342,6 +414,7 @@ export async function updateDeal(
     nextActivityAt?: Date | null;
     companyId?: string | null;
     contactId?: string | null;
+    brief?: string | null;
   },
 ): Promise<void> {
   const { value, ...rest } = patch;
@@ -386,6 +459,10 @@ export async function moveDealStage(
     if (!deal) throw new CrmError("Deal no encontrado.");
 
     const targetStage = await requireStage(tx, partnerId, newStageId);
+    // Único punto de enforcement del gate de brief para clientes nuevos.
+    if (deal.stageId !== newStageId) {
+      await assertBriefGate(tx, partnerId, targetStage, deal);
+    }
     const sourceStageId = deal.stageId;
 
     const targetRows = await tx

@@ -63,6 +63,21 @@ describe.skipIf(!hasDb)("crm service (integration)", () => {
         );
       }
       await db.delete(schema.customFields).where(eq(schema.customFields.partnerId, partnerId));
+      // El trigger crea un workspace al ganar un deal; desmontar su árbol
+      // antes de borrar deals/partner (mismo patrón del test de finance).
+      const wsRows = await db
+        .select({ id: schema.workspaces.id })
+        .from(schema.workspaces)
+        .where(eq(schema.workspaces.partnerId, partnerId));
+      const wsIds = wsRows.map((w) => w.id);
+      if (wsIds.length) {
+        await db.delete(schema.kanbanCards).where(inArray(schema.kanbanCards.workspaceId, wsIds));
+        await db.delete(schema.kanbanColumns).where(inArray(schema.kanbanColumns.workspaceId, wsIds));
+        await db
+          .delete(schema.workspaceProfiles)
+          .where(inArray(schema.workspaceProfiles.workspaceId, wsIds));
+        await db.delete(schema.workspaces).where(inArray(schema.workspaces.id, wsIds));
+      }
       await db.delete(schema.deals).where(eq(schema.deals.partnerId, partnerId));
       await db.delete(schema.contacts).where(eq(schema.contacts.partnerId, partnerId));
       await db.delete(schema.companies).where(eq(schema.companies.partnerId, partnerId));
@@ -112,6 +127,8 @@ describe.skipIf(!hasDb)("crm service (integration)", () => {
     const [first, second] = snapshot.stages;
 
     const dealId = snapshot.deals[0].id;
+    // "Propuesta" exige brief por defecto para clientes nuevos (PR-12).
+    await crm.updateDeal(partnerA, dealId, { brief: "Diagnóstico del cliente." });
     await crm.moveDealStage(partnerA, dealId, second.id, 0);
 
     const after = await crm.getCrmSnapshot(partnerA);
@@ -198,6 +215,107 @@ describe.skipIf(!hasDb)("crm service (integration)", () => {
         nextActivityAt: new Date("+020260-07-10T09:00:00.000Z"),
       }),
     ).rejects.toThrow();
+  });
+
+  it("enforces the brief gate on new clients and lets recurring clients pass", async () => {
+    const snapshot = await crm.getCrmSnapshot(partnerA);
+    // Etapa con gate propia del test (no depende del default de Propuesta).
+    const gated = await crm.createStage(partnerA, { name: "Con gate", color: "teal" });
+    const { eq } = await import("drizzle-orm");
+    await db
+      .update(schema.pipelineStages)
+      .set({ requiresBrief: true })
+      .where(eq(schema.pipelineStages.id, gated.id));
+    const wonStage = snapshot.stages.find((s) => s.isWon)!;
+    const openStage = snapshot.stages.find((s) => !s.isWon)!;
+
+    const companyId = await crm.createCompany(partnerA, "Gate Corp Nueva");
+    const dealId = await crm.createDeal(partnerA, {
+      title: "Deal cliente nuevo",
+      value: 100,
+      stageId: openStage.id,
+      companyId,
+    });
+
+    // 1) Cliente nuevo sin brief → bloqueado con mensaje claro.
+    await expect(
+      crm.moveDealStage(partnerA, dealId, gated.id, 0),
+    ).rejects.toThrow(/cliente es nuevo/);
+
+    // 2) createDeal directo en la etapa gated sin brief → también bloqueado.
+    await expect(
+      crm.createDeal(partnerA, {
+        title: "Por la puerta de atrás",
+        value: 1,
+        stageId: gated.id,
+        companyId,
+      }),
+    ).rejects.toThrow(/cliente es nuevo/);
+
+    // 3) Con brief, pasa.
+    await crm.updateDeal(partnerA, dealId, { brief: "Diagnóstico completo." });
+    await crm.moveDealStage(partnerA, dealId, gated.id, 0);
+
+    // 4) Cliente recurrente (empresa con deal ganado) pasa SIN brief.
+    const recurringCompany = await crm.createCompany(partnerA, "Gate Corp Recurrente");
+    const wonDeal = await crm.createDeal(partnerA, {
+      title: "Ya ganado",
+      value: 500,
+      stageId: wonStage.id,
+      companyId: recurringCompany,
+      brief: "Diagnóstico original.",
+    });
+    const recurringDeal = await crm.createDeal(partnerA, {
+      title: "Upsell recurrente",
+      value: 200,
+      stageId: openStage.id,
+      companyId: recurringCompany,
+    });
+    await crm.moveDealStage(partnerA, recurringDeal, gated.id, 0);
+
+    // 5) Con el gate apagado nada bloquea (compatibilidad total).
+    await crm.updateStage(partnerA, gated.id, { requiresBrief: false });
+    const freshDeal = await crm.createDeal(partnerA, {
+      title: "Sin gate",
+      value: 50,
+      stageId: openStage.id,
+      companyId: await crm.createCompany(partnerA, "Gate Corp Sin Flag"),
+    });
+    await crm.moveDealStage(partnerA, freshDeal, gated.id, 0);
+
+    // 6) Multi-tenant: los deals ganados de A no hacen "recurrente" a un
+    // cliente de B (isNewClient solo mira deals del mismo partner).
+    const snapshotB = await crm.getCrmSnapshot(partnerB);
+    const gatedB = await crm.createStage(partnerB, { name: "Gate B", color: "amber" });
+    await db
+      .update(schema.pipelineStages)
+      .set({ requiresBrief: true })
+      .where(eq(schema.pipelineStages.id, gatedB.id));
+    const dealB = await crm.createDeal(partnerB, {
+      title: "Deal de B",
+      value: 10,
+      stageId: snapshotB.stages[0].id,
+      // Sin empresa/contacto: nuevo conservador — y aunque compartiera nombre
+      // con empresas de A, los ids son de otro tenant.
+    });
+    await expect(
+      crm.moveDealStage(partnerB, dealB, gatedB.id, 0),
+    ).rejects.toThrow(/cliente es nuevo/);
+
+    // El snapshot expone los flags para la UI.
+    const after = await crm.getCrmSnapshot(partnerA);
+    const upsell = after.deals.find((d) => d.id === recurringDeal)!;
+    expect(upsell.isNewClient).toBe(false);
+    const fresh = after.deals.find((d) => d.id === wonDeal)!;
+    expect(fresh.brief).toBe("Diagnóstico original.");
+
+    // Limpieza local del test (los partners se limpian en afterAll).
+    for (const id of [dealId, wonDeal, recurringDeal, freshDeal]) {
+      await crm.deleteDeal(partnerA, id);
+    }
+    await crm.deleteDeal(partnerB, dealB);
+    await crm.deleteStage(partnerA, gated.id);
+    await crm.deleteStage(partnerB, gatedB.id);
   });
 
   it("custom field values are scoped to the owning partner", async () => {

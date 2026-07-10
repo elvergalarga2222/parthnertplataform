@@ -3,6 +3,8 @@ import {
   activityGroupOf,
   applyMoveLocally,
   groupDealsByActivity,
+  hasBrief,
+  isNewClient,
   slugifyFieldKey,
   stageTotals,
 } from "./helpers";
@@ -23,6 +25,8 @@ function deal(partial: Partial<DealView> & { id: string }): DealView {
     contactId: null,
     contactName: null,
     createdAt: "2026-01-01T00:00:00.000Z",
+    brief: null,
+    isNewClient: true,
     custom: {},
     ...partial,
   };
@@ -121,5 +125,47 @@ describe("applyMoveLocally", () => {
 
   it("returns the input untouched for an unknown deal", () => {
     expect(applyMoveLocally(board, "zzz", "s2", 0)).toBe(board);
+  });
+});
+
+describe("isNewClient (gate de brief)", () => {
+  const key = (id: string, companyId: string | null, contactId: string | null) => ({
+    id,
+    companyId,
+    contactId,
+  });
+
+  it("is new when its company has no other won deal", () => {
+    expect(isNewClient(key("d1", "c1", null), [])).toBe(true);
+    expect(isNewClient(key("d1", "c1", null), [key("w1", "c2", null)])).toBe(true);
+  });
+
+  it("is recurring when the company already won a deal", () => {
+    expect(isNewClient(key("d1", "c1", null), [key("w1", "c1", null)])).toBe(false);
+  });
+
+  it("falls back to the contact when there is no company", () => {
+    expect(isNewClient(key("d1", null, "p1"), [key("w1", null, "p1")])).toBe(false);
+    expect(isNewClient(key("d1", null, "p1"), [key("w1", null, "p2")])).toBe(true);
+    // Con empresa, el contacto NO cuenta: manda la empresa.
+    expect(isNewClient(key("d1", "c9", "p1"), [key("w1", null, "p1")])).toBe(true);
+  });
+
+  it("ignores the deal itself (a won deal is not its own precedent)", () => {
+    expect(isNewClient(key("d1", "c1", null), [key("d1", "c1", null)])).toBe(true);
+  });
+
+  it("treats deals without company or contact as new (conservative)", () => {
+    expect(isNewClient(key("d1", null, null), [key("w1", "c1", "p1")])).toBe(true);
+  });
+});
+
+describe("hasBrief", () => {
+  it("requires non-whitespace content", () => {
+    expect(hasBrief("Diagnóstico hecho")).toBe(true);
+    expect(hasBrief("")).toBe(false);
+    expect(hasBrief("   \n ")).toBe(false);
+    expect(hasBrief(null)).toBe(false);
+    expect(hasBrief(undefined)).toBe(false);
   });
 });

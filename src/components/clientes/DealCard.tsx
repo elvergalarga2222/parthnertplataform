@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CalendarClock } from "lucide-react";
+import { Building2, CalendarClock, FileWarning } from "lucide-react";
 import type { DealView } from "@/modules/crm/types";
 import { formatMoney } from "@/modules/crm/helpers";
 import FitBadge from "./FitBadge";
@@ -31,7 +31,18 @@ export default function DealCard({
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-[13px] font-semibold leading-snug">{deal.title}</h3>
-        <FitBadge fit={deal.fit} />
+        <span className="flex shrink-0 items-center gap-1.5">
+          {deal.isNewClient && !deal.brief?.trim() && (
+            <FileWarning
+              size={13}
+              className="text-amber-400"
+              aria-label="Brief pendiente"
+            >
+              <title>Brief pendiente — cliente nuevo sin diagnóstico</title>
+            </FileWarning>
+          )}
+          <FitBadge fit={deal.fit} />
+        </span>
       </div>
 
       <p className="mt-1.5 text-[15px] font-bold tracking-tight text-primary-soft">

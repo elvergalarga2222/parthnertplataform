@@ -68,7 +68,8 @@ async function main() {
     .values(
       [
         { name: "Descubrimiento", color: "purple" },
-        { name: "Propuesta", color: "violet" },
+        // Gate de brief: clientes nuevos necesitan diagnóstico para entrar.
+        { name: "Propuesta", color: "violet", requiresBrief: true },
         { name: "Negociación", color: "teal" },
         { name: "Cerrado Ganado", color: "green", isWon: true },
       ].map((s, i) => ({ ...s, partnerId, position: i })),
@@ -140,6 +141,8 @@ async function main() {
       fit: "excelente",
       nextActivity: "Llamada de cierre con dirección",
       nextActivityAt: at(0),
+      brief:
+        "Cliente nuevo del sector tech. Objetivo: plataforma integral con IA para operaciones. Presupuesto aprobado por dirección; decisor: Leonardo.",
     },
     {
       title: "Consultoría Cloud Pro",
@@ -160,6 +163,8 @@ async function main() {
       fit: "bueno",
       nextActivity: "Demo con el equipo médico",
       nextActivityAt: at(-1),
+      brief:
+        "Clínica con 3 sedes; agenda hoy en papel y WhatsApp. Objetivo: sistema de citas digital con recordatorios. Sensibles al precio.",
     },
     {
       title: "Consultoría Transformación Digital",
@@ -201,6 +206,7 @@ async function main() {
         fit: seed.fit,
         nextActivity: seed.nextActivity,
         nextActivityAt: seed.nextActivityAt,
+        brief: "brief" in seed ? seed.brief : null,
         position,
       })
       .returning();
