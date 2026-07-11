@@ -1,9 +1,11 @@
-import { desc, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { partners } from "@/db/schema";
+import { feedbackReports, partners } from "@/db/schema";
 import { toIsoOrEpoch, toIsoOrNull } from "@/lib/dates";
 import { LOG_BUFFER_KEY } from "@/lib/logger";
 import { getRedis } from "@/lib/redis";
+import type { FeedbackStatus, FeedbackType } from "@/modules/feedback/service";
 
 // Panel del OPERADOR — capa de composición (precedente: dashboard/). Es la
 // única zona legítimamente cross-tenant del sistema: puede leer tablas de
@@ -18,6 +20,7 @@ export interface AdminPartnerRow {
   email: string;
   displayName: string | null;
   status: "active" | "frozen";
+  isTester: boolean;
   createdAt: string;
   lastLoginAt: string | null;
   workspaces: number;
@@ -31,41 +34,52 @@ function toNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// Alias explícito de partners, referenciado por su nombre LITERAL ("p") en
+// las subqueries de abajo: interpolar una columna Drizzle (${partners.id})
+// dentro de un fragmento sql`` la renderiza SIN calificar ("id" a secas,
+// incluso con alias()), y dentro de un subquery correlacionado Postgres
+// resuelve ese "id" contra el FROM interno (p. ej. access_audit_log.id,
+// bigint) en vez del id externo (uuid) — "operator does not exist: uuid =
+// bigint". Escribir "p"."id" como texto (sabemos el nombre del alias porque
+// lo elegimos nosotros) evita la ambigüedad.
+const p = alias(partners, "p");
+
 export async function listPartners(): Promise<AdminPartnerRow[]> {
   const rows = await db
     .select({
-      partner: partners,
+      partner: p,
       lastLoginAt: sql<string | null>`(
         SELECT MAX(a.created_at) FROM access_audit_log a
-        WHERE a.partner_id = ${partners.id} AND a.event = 'login'
+        WHERE a.partner_id = "p"."id" AND a.event = 'login'
       )`,
       workspaces: sql<string>`(
-        SELECT COUNT(*) FROM workspaces w WHERE w.partner_id = ${partners.id}
+        SELECT COUNT(*) FROM workspaces w WHERE w.partner_id = "p"."id"
       )`,
       deals: sql<string>`(
-        SELECT COUNT(*) FROM deals d WHERE d.partner_id = ${partners.id}
+        SELECT COUNT(*) FROM deals d WHERE d.partner_id = "p"."id"
       )`,
       aiTokens30d: sql<string>`(
         SELECT COALESCE(SUM(g.tokens_input + g.tokens_output), 0)
         FROM ai_generations g
-        WHERE g.partner_id = ${partners.id}
+        WHERE g.partner_id = "p"."id"
           AND g.created_at >= now() - interval '30 days'
       )`,
       aiCostUsd30d: sql<string>`(
         SELECT COALESCE(SUM(g.cost_usd), 0)
         FROM ai_generations g
-        WHERE g.partner_id = ${partners.id}
+        WHERE g.partner_id = "p"."id"
           AND g.created_at >= now() - interval '30 days'
       )`,
     })
-    .from(partners)
-    .orderBy(desc(partners.createdAt));
+    .from(p)
+    .orderBy(desc(p.createdAt));
 
   return rows.map(({ partner, lastLoginAt, ...agg }) => ({
     id: partner.id,
     email: partner.email,
     displayName: partner.displayName,
     status: partner.status as "active" | "frozen",
+    isTester: partner.isTester,
     createdAt: toIsoOrEpoch(partner.createdAt),
     // El subselect llega como string/Date según el driver; normalizar seguro.
     lastLoginAt: lastLoginAt ? toIsoOrNull(new Date(lastLoginAt)) : null,
@@ -196,4 +210,76 @@ export async function getErrorLogs(): Promise<ErrorLogEntry[]> {
 export async function clearErrorLogs(): Promise<void> {
   if (!process.env.REDIS_URL) return;
   await getRedis().del(LOG_BUFFER_KEY);
+}
+
+/** Toggle del flag de tester (PR-15) — activa/desactiva el botón de feedback. */
+export async function setTester(partnerId: string, value: boolean): Promise<void> {
+  const result = await db
+    .update(partners)
+    .set({ isTester: value, updatedAt: new Date() })
+    .where(eq(partners.id, partnerId))
+    .returning({ id: partners.id });
+  if (result.length === 0) throw new AdminError("Partner no encontrado.");
+}
+
+// --- Feedback de testers (PR-15) ---------------------------------------------
+
+export interface FeedbackReportRow {
+  id: string;
+  partnerId: string;
+  partnerEmail: string;
+  route: string;
+  type: FeedbackType;
+  description: string;
+  status: FeedbackStatus;
+  userAgent: string | null;
+  createdAt: string;
+}
+
+export async function listFeedbackReports(filter?: {
+  status?: FeedbackStatus;
+  type?: FeedbackType;
+}): Promise<FeedbackReportRow[]> {
+  const conditions = [];
+  if (filter?.status) conditions.push(eq(feedbackReports.status, filter.status));
+  if (filter?.type) conditions.push(eq(feedbackReports.type, filter.type));
+
+  const rows = await db
+    .select({ report: feedbackReports, partnerEmail: partners.email })
+    .from(feedbackReports)
+    .innerJoin(partners, eq(feedbackReports.partnerId, partners.id))
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(feedbackReports.createdAt));
+
+  return rows.map(({ report, partnerEmail }) => ({
+    id: report.id,
+    partnerId: report.partnerId,
+    partnerEmail,
+    route: report.route,
+    type: report.type as FeedbackType,
+    description: report.description,
+    status: report.status as FeedbackStatus,
+    userAgent: report.userAgent,
+    createdAt: toIsoOrEpoch(report.createdAt),
+  }));
+}
+
+export async function countNewFeedbackReports(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<string>`COUNT(*)` })
+    .from(feedbackReports)
+    .where(eq(feedbackReports.status, "nuevo"));
+  return toNumber(row?.count);
+}
+
+export async function setFeedbackStatus(
+  reportId: string,
+  status: FeedbackStatus,
+): Promise<void> {
+  const result = await db
+    .update(feedbackReports)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(feedbackReports.id, reportId))
+    .returning({ id: feedbackReports.id });
+  if (result.length === 0) throw new AdminError("Reporte no encontrado.");
 }
