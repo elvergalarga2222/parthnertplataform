@@ -11,6 +11,10 @@ class FakeProvider implements MembershipProvider {
   async listActiveMembers() {
     return this.members.filter((m) => m.status === "active");
   }
+
+  async listMembers() {
+    return this.members;
+  }
 }
 
 describe("MembershipProvider contract", () => {
@@ -19,12 +23,16 @@ describe("MembershipProvider contract", () => {
     email: "partner@example.com",
     displayName: "Partner Uno",
     status: "active",
+    currentPeriodEndsAt: null,
+    cancelAtPeriodEnd: false,
   };
   const churned: Member = {
     externalId: "sk_2",
     email: "churned@example.com",
     displayName: null,
     status: "churned",
+    currentPeriodEndsAt: null,
+    cancelAtPeriodEnd: true,
   };
 
   it("finds a member by email", async () => {
@@ -42,5 +50,10 @@ describe("MembershipProvider contract", () => {
   it("lists only active members for the polling job", async () => {
     const provider = new FakeProvider([active, churned]);
     expect(await provider.listActiveMembers()).toEqual([active]);
+  });
+
+  it("lists every status for the sync job", async () => {
+    const provider = new FakeProvider([active, churned]);
+    expect(await provider.listMembers()).toEqual([active, churned]);
   });
 });

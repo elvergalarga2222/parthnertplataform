@@ -69,7 +69,7 @@ npm run db:seed      # seed demo del CRM (partner demo, etapas, deals); idempote
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ✅ Hecho |
-| 1 | Gating Skool: login, webhook, polling, congelamiento | ⬜ Pendiente |
+| 1 | Gating Skool: login, webhook, polling, congelamiento | 🟨 En curso (login+congelamiento manual vía panel admin y polling+congelamiento automático de membresías ya construidos; falta el webhook entrante de Skool y el login-hardening) |
 | 2 | CRM: empresas/contactos/deals, pipeline kanban configurable, campos custom | 🟨 En curso (falta inbox, listas guardadas, automatizaciones) |
 | 3 | Workspace: kanban, SOPs inyectados, vista de cliente | 🟨 En curso (falta vista pública de cliente; IA en PR aparte) |
 | 4 | Finanzas: 70/30, cuentas por cobrar, margen | 🟨 En curso (PR-4a: modelo de datos multi-moneda por partner, vistas `v_monthly_revenue`/`v_monthly_profit` con costo IA, webhook n8n de facturas, KPIs reales + alertas de cobro; falta calendario, formularios y tablas UI = PR-4b) |
