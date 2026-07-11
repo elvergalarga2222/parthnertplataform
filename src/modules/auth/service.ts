@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { accessAuditLog, partners, skoolMemberships } from "@/db/schema";
 import { toIsoOrNull } from "@/lib/dates";
 import { isAdminEmail } from "./admin";
+import type { Member } from "./membership-provider";
 import { getMembershipProvider } from "./providers";
 import { createSession, getSessionPartnerId, revokeAllSessions } from "./session";
 
@@ -20,23 +21,7 @@ export class LoginError extends Error {
 
 export type Partner = typeof partners.$inferSelect;
 
-/**
- * Login por email contra la membresía de Skool. No hay registro manual (regla
- * #1): si el email no corresponde a un miembro activo, se rechaza. Crea/actualiza
- * el Partner, registra la auditoría y abre una sesión en Redis.
- */
-export async function loginWithEmail(email: string): Promise<Partner> {
-  const normalized = email.toLowerCase().trim();
-  const provider = getMembershipProvider();
-  const member = await provider.findMemberByEmail(normalized);
-
-  if (!member || member.status !== "active") {
-    throw new LoginError(
-      "not_member",
-      "No encontramos una membresía activa de Skool para este correo.",
-    );
-  }
-
+async function upsertBySkoolId(member: Member): Promise<Partner> {
   const [partner] = await db
     .insert(partners)
     .values({
@@ -54,13 +39,20 @@ export async function loginWithEmail(email: string): Promise<Partner> {
       },
     })
     .returning();
+  return partner;
+}
 
+async function completeLogin(
+  partner: Partner,
+  email: string,
+  opts: { adminBypass: boolean },
+): Promise<Partner> {
   // Regla #2: congelar bloquea el acceso sin borrar datos.
   if (partner.status !== "active") {
     await db.insert(accessAuditLog).values({
       partnerId: partner.id,
       event: "login_blocked_frozen",
-      detail: { email: normalized },
+      detail: { email },
     });
     // Copy distinto si el congelamiento fue automático por vencimiento de
     // membresía (PR-10): la reactivación en ese caso es automática al renovar.
@@ -78,11 +70,61 @@ export async function loginWithEmail(email: string): Promise<Partner> {
   await db.insert(accessAuditLog).values({
     partnerId: partner.id,
     event: "login",
-    detail: { email: normalized },
+    detail: opts.adminBypass ? { email, adminBypass: true } : { email },
   });
 
   await createSession(partner.id);
   return partner;
+}
+
+/**
+ * Login por email contra la membresía de Skool. No hay registro manual (regla
+ * #1): si el email no corresponde a un miembro activo, se rechaza — salvo
+ * excepción de operador (ADMIN_EMAILS, confirmada en PR-7): sin esa membresía
+ * activa, un email de operador entra igual con una identidad sintética
+ * (`admin:<email>`) para que el panel /admin sea alcanzable incluso si el
+ * operador no pertenece al grupo de Skool. Crea/actualiza el Partner, registra
+ * la auditoría y abre una sesión en Redis.
+ */
+export async function loginWithEmail(email: string): Promise<Partner> {
+  const normalized = email.toLowerCase().trim();
+  const provider = getMembershipProvider();
+  const realMember = await provider.findMemberByEmail(normalized);
+
+  if (realMember && realMember.status === "active") {
+    const partner = await upsertBySkoolId(realMember);
+    return completeLogin(partner, normalized, { adminBypass: false });
+  }
+
+  if (!isAdminEmail(normalized)) {
+    throw new LoginError(
+      "not_member",
+      "No encontramos una membresía activa de Skool para este correo.",
+    );
+  }
+
+  // Bypass de operador: lookup previo por email. Si el admin ya tiene fila
+  // (p. ej. fue miembro real y canceló), reutilizarla — el upsert sintético
+  // de abajo va keyed por skool_member_id y crearía una segunda fila con el
+  // mismo email, violando el UNIQUE de partners.email.
+  const [existing] = await db
+    .select()
+    .from(partners)
+    .where(eq(partners.email, normalized));
+  if (existing) {
+    return completeLogin(existing, normalized, { adminBypass: true });
+  }
+
+  const syntheticMember: Member = {
+    externalId: `admin:${normalized}`,
+    email: normalized,
+    displayName: null,
+    status: "active",
+    currentPeriodEndsAt: null,
+    cancelAtPeriodEnd: false,
+  };
+  const partner = await upsertBySkoolId(syntheticMember);
+  return completeLogin(partner, normalized, { adminBypass: true });
 }
 
 /**

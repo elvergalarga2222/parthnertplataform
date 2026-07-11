@@ -276,4 +276,35 @@ describe.skipIf(!hasDb)("syncMemberships (integration)", () => {
       .where(eq(schema.partners.id, missing.id));
     expect(partner.status).toBe("frozen");
   });
+
+  it("never freezes a partner whose email is in ADMIN_EMAILS, even after 3+ missing runs (anti-lockout)", async () => {
+    const admin = await makePartner();
+    const originalAdminEmails = process.env.ADMIN_EMAILS;
+    process.env.ADMIN_EMAILS = `${admin.externalId}@test.dev`;
+
+    try {
+      // Primer run: el admin sí aparece en el provider, siembra su fila de
+      // skool_memberships (para poder ejercer missingCount en los runs de abajo).
+      const providerWithAdmin = new FakeProvider([mkMember({ externalId: admin.externalId })]);
+      await sync.syncMemberships(new Date(), providerWithAdmin);
+
+      // 4 runs consecutivos sin el admin en la respuesta ⇒ supera el umbral de 3.
+      const providerWithoutAdmin = new FakeProvider([
+        mkMember({ externalId: `other_${randomUUID()}` }),
+      ]);
+      for (let i = 0; i < 4; i++) {
+        await sync.syncMemberships(new Date(), providerWithoutAdmin);
+      }
+
+      const { eq } = await import("drizzle-orm");
+      const [partner] = await db
+        .select()
+        .from(schema.partners)
+        .where(eq(schema.partners.id, admin.id));
+      expect(partner.status).toBe("active");
+    } finally {
+      if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+      else process.env.ADMIN_EMAILS = originalAdminEmails;
+    }
+  });
 });
