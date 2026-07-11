@@ -10,6 +10,7 @@ import {
   aiPrompts,
   budgetProjections,
   expenses,
+  feedbackReports,
   invoices,
   kanbanCards,
   kanbanColumns,
@@ -60,6 +61,7 @@ async function main() {
     await seedWorkspaceDemo(partnerId);
     await seedGlobalAiPrompts();
     await seedFinanceDemo(partnerId);
+    await seedFeedbackDemo(partnerId);
     return;
   }
 
@@ -246,6 +248,7 @@ async function main() {
   await seedWorkspaceDemo(partnerId);
   await seedGlobalAiPrompts();
   await seedFinanceDemo(partnerId);
+  await seedFeedbackDemo(partnerId);
 
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
@@ -548,6 +551,48 @@ async function seedFinanceDemo(partnerId: string) {
   console.log(
     `Finance demo seeded: ${paidInvoices.length} facturas pagadas, ${openInvoices.length} pendientes/vencidas, 1 factura USD (n8n), 7 gastos, 1 presupuesto.`,
   );
+}
+
+// Idempotent tester demo (PR-15): marca al partner demo como tester y siembra
+// 2 reportes de ejemplo (1 bug nuevo, 1 sugerencia revisada).
+async function seedFeedbackDemo(partnerId: string) {
+  await db
+    .update(partners)
+    .set({ isTester: true, updatedAt: new Date() })
+    .where(and(eq(partners.id, partnerId), eq(partners.isTester, false)));
+
+  const [existing] = await db
+    .select({ id: feedbackReports.id })
+    .from(feedbackReports)
+    .where(eq(feedbackReports.partnerId, partnerId))
+    .limit(1);
+  if (existing) {
+    console.log("Partner already has feedback reports; skipping feedback seed.");
+    return;
+  }
+
+  await db.insert(feedbackReports).values([
+    {
+      partnerId,
+      route: "/clientes",
+      type: "bug",
+      description:
+        "Al mover un deal a la etapa Propuesta sin llenar el brief, el error se ve genérico en vez de explicar qué falta.",
+      status: "nuevo",
+      userAgent: "Mozilla/5.0 (seed demo)",
+    },
+    {
+      partnerId,
+      route: "/partner-business",
+      type: "sugerencia",
+      description:
+        "Sería útil poder exportar la tabla de facturas a CSV directamente desde el filtro activo.",
+      status: "revisado",
+      userAgent: "Mozilla/5.0 (seed demo)",
+    },
+  ]);
+
+  console.log("Feedback demo seeded: partner marcado tester, 2 reportes.");
 }
 
 main()

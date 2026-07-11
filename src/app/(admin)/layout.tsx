@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { getCurrentAdmin } from "@/modules/auth/admin";
 import { logoutAction } from "@/modules/auth/actions";
+import { countNewFeedbackReports } from "@/modules/admin/service";
 
 // Panel del OPERADOR. Gate server-side en cada request; los no-admin van al
 // dashboard normal (nunca a una página de error que confirme que /admin
@@ -14,6 +15,8 @@ export default async function AdminLayout({
 }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/dashboard");
+
+  const newFeedbackCount = await countNewFeedbackReports();
 
   return (
     <div className="flex min-h-screen flex-col bg-base text-ink">
@@ -37,6 +40,23 @@ export default async function AdminLayout({
             className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink"
           >
             Partners
+          </Link>
+          <Link
+            href="/admin/logs"
+            className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            Logs
+          </Link>
+          <Link
+            href="/admin/feedback"
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            Feedback
+            {newFeedbackCount > 0 && (
+              <span className="rounded-full bg-negative px-1.5 py-0.5 text-[10px] font-bold text-white">
+                {newFeedbackCount}
+              </span>
+            )}
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-3">

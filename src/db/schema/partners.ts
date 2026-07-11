@@ -24,6 +24,10 @@ export const partners = pgTable(
     // Default currency for new invoices/expenses/budgets (COP/USD/EUR). Each
     // record can still override it — there is no cross-currency conversion.
     defaultCurrency: text("default_currency").notNull().default("USD"),
+    // Feedback de testers (PR-15): ve el botón flotante de reporte. Los
+    // emails de ADMIN_EMAILS cuentan siempre como testers implícitos
+    // (ver feedback/service.ts) sin necesidad de tocar esta columna.
+    isTester: boolean("is_tester").notNull().default(false),
     frozenAt: timestamp("frozen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

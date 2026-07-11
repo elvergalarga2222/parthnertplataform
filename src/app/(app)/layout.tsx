@@ -3,8 +3,10 @@ import { logoutAction } from "@/modules/auth/actions";
 import { getCurrentPartner, getMembershipAlert } from "@/modules/auth/service";
 import { getTeam } from "@/modules/dashboard/data";
 import { getInvoiceAlerts } from "@/modules/finance/service";
+import { isTester } from "@/modules/feedback/service";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Topbar from "@/components/dashboard/Topbar";
+import FeedbackButton from "@/components/feedback/FeedbackButton";
 import MembershipAlertBanner from "@/components/dashboard/MembershipAlertBanner";
 
 // Gating server-side: toda ruta bajo (app) exige una sesión válida y un partner
@@ -26,6 +28,9 @@ export default async function AppLayout({
     getMembershipAlert(partner.id),
   ]);
   const displayName = partner.displayName ?? partner.email;
+  // Calculado server-side: para un partner normal, `false` es todo lo que se
+  // serializa — el componente ni se evalúa (misma disciplina que isAdmin).
+  const showFeedbackButton = isTester(partner);
 
   return (
     // Las variantes print: permiten que /espacios/[id]/exportar imprima el
@@ -43,6 +48,7 @@ export default async function AppLayout({
           {children}
         </main>
       </div>
+      {showFeedbackButton && <FeedbackButton />}
     </div>
   );
 }
