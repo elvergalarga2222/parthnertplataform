@@ -12,11 +12,19 @@ export class OpenMembershipProvider implements MembershipProvider {
       email: normalized,
       displayName: normalized.split("@")[0],
       status: "active",
+      currentPeriodEndsAt: null,
+      cancelAtPeriodEnd: false,
     };
   }
 
   async listActiveMembers(): Promise<Member[]> {
     // Sin catálogo de miembros en modo abierto (el polling de Skool no aplica).
+    return [];
+  }
+
+  async listMembers(): Promise<Member[]> {
+    // Sin catálogo: el job de sincronización trata la lista vacía como "sin
+    // datos" y no congela a nadie (fail-safe).
     return [];
   }
 }

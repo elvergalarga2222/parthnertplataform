@@ -1,6 +1,6 @@
 {
-  "id": "390bea60-6843-4627-802b-1f61d7a0b15c",
-  "prevId": "ec3f6acf-2105-4670-b0ac-0aa9c0b5b4e8",
+  "id": "d4a222d4-5460-4290-9ac0-0aa64dc0ac59",
+  "prevId": "390bea60-6843-4627-802b-1f61d7a0b15c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -90,6 +90,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'USD'"
+        },
+        "is_tester": {
+          "name": "is_tester",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "frozen_at": {
           "name": "frozen_at",
@@ -2581,6 +2588,146 @@
         "invoices_currency_check": {
           "name": "invoices_currency_check",
           "value": "\"invoices\".\"currency\" IN ('COP', 'USD', 'EUR')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.feedback_reports": {
+      "name": "feedback_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "partner_id": {
+          "name": "partner_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "route": {
+          "name": "route",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'nuevo'"
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "feedback_reports_partner_idx": {
+          "name": "feedback_reports_partner_idx",
+          "columns": [
+            {
+              "expression": "partner_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedback_reports_status_idx": {
+          "name": "feedback_reports_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "feedback_reports_created_idx": {
+          "name": "feedback_reports_created_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "feedback_reports_partner_id_partners_id_fk": {
+          "name": "feedback_reports_partner_id_partners_id_fk",
+          "tableFrom": "feedback_reports",
+          "tableTo": "partners",
+          "columnsFrom": [
+            "partner_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "feedback_reports_type_check": {
+          "name": "feedback_reports_type_check",
+          "value": "\"feedback_reports\".\"type\" IN ('bug', 'sugerencia')"
+        },
+        "feedback_reports_status_check": {
+          "name": "feedback_reports_status_check",
+          "value": "\"feedback_reports\".\"status\" IN ('nuevo', 'revisado', 'resuelto')"
         }
       },
       "isRLSEnabled": false

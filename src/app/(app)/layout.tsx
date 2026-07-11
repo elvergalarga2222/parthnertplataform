@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 import { logoutAction } from "@/modules/auth/actions";
-import { getCurrentPartner } from "@/modules/auth/service";
+import { getCurrentPartner, getMembershipAlert } from "@/modules/auth/service";
 import { getTeam } from "@/modules/dashboard/data";
 import { getInvoiceAlerts } from "@/modules/finance/service";
 import { isTester } from "@/modules/feedback/service";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Topbar from "@/components/dashboard/Topbar";
 import FeedbackButton from "@/components/feedback/FeedbackButton";
+import MembershipAlertBanner from "@/components/dashboard/MembershipAlertBanner";
 
 // Gating server-side: toda ruta bajo (app) exige una sesión válida y un partner
 // activo. Al leer la cookie de sesión, Next renderiza estas rutas de forma
@@ -21,9 +22,10 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const [team, alerts] = await Promise.all([
+  const [team, alerts, membershipAlert] = await Promise.all([
     getTeam(),
     getInvoiceAlerts(partner.id),
+    getMembershipAlert(partner.id),
   ]);
   const displayName = partner.displayName ?? partner.email;
   // Calculado server-side: para un partner normal, `false` es todo lo que se
@@ -40,6 +42,7 @@ export default async function AppLayout({
       <div className="flex min-w-0 flex-1 flex-col print:block">
         <div className="contents print:hidden">
           <Topbar displayName={displayName} alerts={alerts} />
+          {membershipAlert && <MembershipAlertBanner alert={membershipAlert} />}
         </div>
         <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">
           {children}

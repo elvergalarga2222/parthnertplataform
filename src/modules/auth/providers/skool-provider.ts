@@ -11,6 +11,24 @@ interface SkoolMemberDto {
   // Skool suele exponer el estado de la membresía; normalizamos abajo.
   status?: string;
   active?: boolean;
+  // Campos de ciclo de vida ASUMIDOS (riesgo #1: validar contra la API real
+  // antes del deploy — si Skool no los expone, quedan null/false y el job de
+  // sincronización usa el plan B de gracia).
+  current_period_ends_at?: string | null;
+  renews_at?: string | null;
+  expires_at?: string | null;
+  cancel_at_period_end?: boolean;
+  cancelled?: boolean;
+}
+
+/** Primera fecha de fin de periodo presente y parseable, como ISO. */
+function normalizePeriodEnd(dto: SkoolMemberDto): string | null {
+  for (const raw of [dto.current_period_ends_at, dto.renews_at, dto.expires_at]) {
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return null;
 }
 
 function normalizeStatus(dto: SkoolMemberDto): Member["status"] {
@@ -37,6 +55,8 @@ function toMember(dto: SkoolMemberDto): Member {
     email: dto.email.toLowerCase(),
     displayName: dto.name ?? null,
     status: normalizeStatus(dto),
+    currentPeriodEndsAt: normalizePeriodEnd(dto),
+    cancelAtPeriodEnd: Boolean(dto.cancel_at_period_end ?? dto.cancelled),
   };
 }
 
@@ -85,5 +105,14 @@ export class SkoolMembershipProvider implements MembershipProvider {
     return (data.members ?? [])
       .map(toMember)
       .filter((m) => m.status === "active");
+  }
+
+  async listMembers(): Promise<Member[]> {
+    // Todos los estados: el job de sincronización necesita ver churned/removed.
+    const query = new URLSearchParams({ group_id: this.groupId });
+    const data = await this.request<{ members: SkoolMemberDto[] }>(
+      `/v1/members?${query.toString()}`,
+    );
+    return (data.members ?? []).map(toMember);
   }
 }

@@ -12,6 +12,8 @@ export class DevMembershipProvider implements MembershipProvider {
       email: email.toLowerCase().trim(),
       displayName: email.split("@")[0],
       status: "active",
+      currentPeriodEndsAt: null,
+      cancelAtPeriodEnd: false,
     }));
   }
 
@@ -23,5 +25,9 @@ export class DevMembershipProvider implements MembershipProvider {
 
   async listActiveMembers(): Promise<Member[]> {
     return this.members.filter((m) => m.status === "active");
+  }
+
+  async listMembers(): Promise<Member[]> {
+    return this.members;
   }
 }
