@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Snowflake, Sun } from "lucide-react";
+import { FlaskConical, Snowflake, Sun } from "lucide-react";
 import Modal from "@/components/system/Modal";
 import {
   freezePartnerAction,
+  setTesterAction,
   unfreezePartnerAction,
 } from "@/modules/admin/actions";
 import type { AdminPartnerRow } from "@/modules/admin/service";
@@ -63,6 +64,9 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
     await runAction(() => unfreezePartnerAction(row.id));
   };
 
+  const toggleTester = (row: Row) =>
+    runAction(() => setTesterAction({ partnerId: row.id, isTester: !row.isTester }));
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-edge bg-surface shadow-card">
       <table className="w-full min-w-[880px] text-left text-[12.5px]">
@@ -70,6 +74,7 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
           <tr className="border-b border-edge text-[11px] uppercase tracking-widest text-ink-muted">
             <th className="px-4 py-3 font-semibold">Partner</th>
             <th className="px-4 py-3 font-semibold">Estado</th>
+            <th className="px-4 py-3 font-semibold">Tester</th>
             <th className="px-4 py-3 font-semibold">Alta</th>
             <th className="px-4 py-3 font-semibold">Último login</th>
             <th className="px-4 py-3 font-semibold">Espacios</th>
@@ -100,6 +105,35 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
                 >
                   {row.status === "active" ? "Activo" : "Congelado"}
                 </span>
+              </td>
+              <td className="px-4 py-3">
+                {row.isAdmin ? (
+                  <span
+                    title="Los operadores (ADMIN_EMAILS) ya ven el botón de feedback siempre"
+                    className="text-[11px] text-ink-muted"
+                  >
+                    implícito
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => toggleTester(row)}
+                    aria-pressed={row.isTester}
+                    title={
+                      row.isTester
+                        ? "Ve el botón de feedback — clic para desactivar"
+                        : "No ve el botón de feedback — clic para activar"
+                    }
+                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold transition-colors ${
+                      row.isTester
+                        ? "bg-primary-faint text-primary-soft"
+                        : "bg-surface-3 text-ink-muted hover:text-ink-secondary"
+                    }`}
+                  >
+                    <FlaskConical size={11} /> {row.isTester ? "Activo" : "Inactivo"}
+                  </button>
+                )}
               </td>
               <td className="px-4 py-3 text-ink-secondary">
                 {new Date(row.createdAt).toLocaleDateString("es-ES", {

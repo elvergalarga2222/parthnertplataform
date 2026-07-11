@@ -9,7 +9,7 @@ import {
   unfreezePartner,
   type Partner,
 } from "@/modules/auth/service";
-import { AdminError, clearErrorLogs } from "./service";
+import { AdminError, clearErrorLogs, setFeedbackStatus, setTester } from "./service";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -28,6 +28,7 @@ async function run(fn: (admin: Partner) => Promise<void>): Promise<ActionResult>
     revalidatePath("/admin");
     revalidatePath("/admin/partners");
     revalidatePath("/admin/logs");
+    revalidatePath("/admin/feedback");
     return { ok: true };
   } catch (err) {
     if (err instanceof AdminError || err instanceof AuthError) {
@@ -59,5 +60,35 @@ export async function unfreezePartnerAction(
 export async function clearErrorLogsAction(): Promise<ActionResult> {
   return run(async () => {
     await clearErrorLogs();
+  });
+}
+
+const setTesterSchema = z.object({
+  partnerId: z.string().uuid(),
+  isTester: z.boolean(),
+});
+
+export async function setTesterAction(
+  input: z.input<typeof setTesterSchema>,
+): Promise<ActionResult> {
+  const parsed = setTesterSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Datos inválidos." };
+  return run(async () => {
+    await setTester(parsed.data.partnerId, parsed.data.isTester);
+  });
+}
+
+const feedbackStatusSchema = z.object({
+  reportId: z.string().uuid(),
+  status: z.enum(["nuevo", "revisado", "resuelto"]),
+});
+
+export async function setFeedbackStatusAction(
+  input: z.input<typeof feedbackStatusSchema>,
+): Promise<ActionResult> {
+  const parsed = feedbackStatusSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Datos inválidos." };
+  return run(async () => {
+    await setFeedbackStatus(parsed.data.reportId, parsed.data.status);
   });
 }
