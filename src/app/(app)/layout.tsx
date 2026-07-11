@@ -1,33 +1,37 @@
 import { redirect } from "next/navigation";
 import { logoutAction } from "@/modules/auth/actions";
-import { getCurrentPartner, getMembershipAlert } from "@/modules/auth/service";
-import { getTeam } from "@/modules/dashboard/data";
+import { getCurrentActor, getMembershipAlert } from "@/modules/auth/service";
 import { getInvoiceAlerts } from "@/modules/finance/service";
 import { isTester } from "@/modules/feedback/service";
+import { listTeamForSidebar } from "@/modules/team/service";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Topbar from "@/components/dashboard/Topbar";
 import FeedbackButton from "@/components/feedback/FeedbackButton";
 import MembershipAlertBanner from "@/components/dashboard/MembershipAlertBanner";
 
-// Gating server-side: toda ruta bajo (app) exige una sesión válida y un partner
-// activo. Al leer la cookie de sesión, Next renderiza estas rutas de forma
-// dinámica, así que la verificación corre en cada request (revocación instantánea).
+// Gating server-side: toda ruta bajo (app) exige una sesión válida — del
+// partner o de uno de sus colaboradores activos (PR-8) — y un partner activo.
+// Al leer la cookie de sesión, Next renderiza estas rutas de forma dinámica,
+// así que la verificación corre en cada request (revocación instantánea).
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const partner = await getCurrentPartner();
-  if (!partner) {
+  const actor = await getCurrentActor();
+  if (!actor) {
     redirect("/login");
   }
+  const { partner, collaborator } = actor;
 
   const [team, alerts, membershipAlert] = await Promise.all([
-    getTeam(),
+    listTeamForSidebar(partner.id),
     getInvoiceAlerts(partner.id),
     getMembershipAlert(partner.id),
   ]);
-  const displayName = partner.displayName ?? partner.email;
+  const displayName = collaborator
+    ? collaborator.displayName
+    : (partner.displayName ?? partner.email);
   // Calculado server-side: para un partner normal, `false` es todo lo que se
   // serializa — el componente ni se evalúa (misma disciplina que isAdmin).
   const showFeedbackButton = isTester(partner);
@@ -41,7 +45,13 @@ export default async function AppLayout({
       </div>
       <div className="flex min-w-0 flex-1 flex-col print:block">
         <div className="contents print:hidden">
-          <Topbar displayName={displayName} alerts={alerts} />
+          <Topbar
+            displayName={displayName}
+            alerts={alerts}
+            collaboratorOfPartnerName={
+              collaborator ? (partner.displayName ?? partner.email) : null
+            }
+          />
           {membershipAlert && <MembershipAlertBanner alert={membershipAlert} />}
         </div>
         <main className="min-h-0 flex-1 overflow-y-auto print:overflow-visible">

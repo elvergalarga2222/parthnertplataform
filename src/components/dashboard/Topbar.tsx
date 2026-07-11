@@ -53,9 +53,12 @@ function AlertRow({ a }: { a: InvoiceAlert }) {
 export default function Topbar({
   displayName,
   alerts = EMPTY_ALERTS,
+  /** "Colaborador de {partner}" — presente solo cuando actúa un colaborador (PR-8). */
+  collaboratorOfPartnerName,
 }: {
   displayName: string;
   alerts?: InvoiceAlerts;
+  collaboratorOfPartnerName?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -177,8 +180,15 @@ export default function Topbar({
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-strong text-[12px] font-bold text-white">
           {displayName[0]?.toUpperCase() ?? "·"}
         </span>
-        <span className="text-[13.5px] font-semibold text-ink max-sm:hidden">
-          {displayName}
+        <span className="flex flex-col max-sm:hidden">
+          <span className="text-[13.5px] font-semibold leading-tight text-ink">
+            {displayName}
+          </span>
+          {collaboratorOfPartnerName && (
+            <span className="text-[10.5px] leading-tight text-ink-muted">
+              Colaborador de {collaboratorOfPartnerName}
+            </span>
+          )}
         </span>
       </div>
     </header>

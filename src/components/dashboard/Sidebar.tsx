@@ -10,6 +10,7 @@ import {
   Settings,
   Sparkles,
   Users,
+  Users2,
   Workflow,
   LayoutGrid,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/espacios", label: "Espacios de Trabajo", icon: LayoutGrid },
   { href: "/partner-business", label: "Partner Business", icon: Briefcase },
+  { href: "/equipo", label: "Equipo", icon: Users2 },
   { href: "/academia", label: "Academia / Bot", icon: Bot },
   { href: "/flujos", label: "Flujos & Procesos", icon: Workflow },
 ];
@@ -89,23 +91,32 @@ export default function Sidebar({
         <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
           Team
         </p>
-        <ul className="mt-3 flex flex-col gap-3">
-          {team.map((member) => (
-            <li key={member.name} className="flex items-center gap-2.5">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[10px] font-bold text-primary-soft ring-1 ring-edge">
-                {initials(member.name)}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate text-[12.5px] font-medium text-ink">
-                  {member.name}
-                </p>
-                <p className="truncate text-[11px] text-ink-muted">
-                  {member.role}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {team.length === 0 ? (
+          <Link
+            href="/equipo"
+            className="mt-3 block text-[12px] font-medium text-primary-soft hover:underline"
+          >
+            Invita a tu equipo
+          </Link>
+        ) : (
+          <ul className="mt-3 flex flex-col gap-3">
+            {team.map((member) => (
+              <li key={member.name} className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-3 text-[10px] font-bold text-primary-soft ring-1 ring-edge">
+                  {initials(member.name)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-[12.5px] font-medium text-ink">
+                    {member.name}
+                  </p>
+                  <p className="truncate text-[11px] text-ink-muted">
+                    {member.role}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="mt-auto flex flex-col gap-1 border-t border-edge px-3 py-4">

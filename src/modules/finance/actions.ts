@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentPartner } from "@/modules/auth/service";
+import { AuthError, requireEditor } from "@/modules/auth/service";
 import {
   FinanceError,
   createExpense,
@@ -24,9 +24,8 @@ import {
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function requirePartnerId(): Promise<string> {
-  const partner = await getCurrentPartner();
-  if (!partner) throw new FinanceError("Sesión no válida.");
-  return partner.id;
+  const actor = await requireEditor();
+  return actor.partner.id;
 }
 
 async function run(fn: (partnerId: string) => Promise<void>): Promise<ActionResult> {
@@ -38,7 +37,9 @@ async function run(fn: (partnerId: string) => Promise<void>): Promise<ActionResu
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
-    if (err instanceof FinanceError) return { ok: false, error: err.message };
+    if (err instanceof FinanceError || err instanceof AuthError) {
+      return { ok: false, error: err.message };
+    }
     console.error("Finance action error:", err);
     return { ok: false, error: "Algo salió mal. Intenta de nuevo." };
   }

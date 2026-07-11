@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentPartner } from "@/modules/auth/service";
+import { AuthError, requireEditor } from "@/modules/auth/service";
 import {
   WorkspaceError,
   createCard,
@@ -22,13 +22,14 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function run(fn: (partnerId: string) => Promise<void>): Promise<ActionResult> {
   try {
-    const partner = await getCurrentPartner();
-    if (!partner) throw new WorkspaceError("Sesión no válida.");
-    await fn(partner.id);
+    const actor = await requireEditor();
+    await fn(actor.partner.id);
     revalidatePath("/espacios");
     return { ok: true };
   } catch (err) {
-    if (err instanceof WorkspaceError) return { ok: false, error: err.message };
+    if (err instanceof WorkspaceError || err instanceof AuthError) {
+      return { ok: false, error: err.message };
+    }
     console.error("Workspace action error:", err);
     return { ok: false, error: "Algo salió mal. Intenta de nuevo." };
   }

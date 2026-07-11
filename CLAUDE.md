@@ -36,7 +36,7 @@ src/
 
 ## Reglas de negocio inquebrantables
 
-1. **No hay registro manual.** La identidad viene solo de la API de Skool; la sesión vive en Redis y es revocable al instante (nunca JWT stateless como sesión primaria).
+1. **No hay registro manual.** La identidad viene solo de la API de Skool; la sesión vive en Redis y es revocable al instante (nunca JWT stateless como sesión primaria). **Excepción (PR-8, decisión 2026-07):** los *colaboradores* (equipo de un Partner) se invitan por email sin pasar por Skool. No son Partners — son invitados subordinados a la cuenta de un Partner, nunca tenants propios — y su acceso vive y muere con el Partner que los invitó: congelar al Partner corta también a sus colaboradores al instante (mismo mecanismo de sesión revocable de esta regla, ver `auth/session.ts` y `auth/service.ts#getCurrentActor`).
 2. **Revocación = congelar, no borrar.** `partners.status = 'frozen'` bloquea todo vía RLS; los datos se conservan.
 3. **Aislamiento total por Partner.** Toda tabla tenant lleva `partner_id` + política RLS. Ningún query cruza tenants.
 4. **Pipeline configurable por Partner.** Las etapas se crean, renombran, reordenan y eliminan desde la UI sin tocar código (decisión 2026-07: los gates SOBA/NOVA dejaron de ser bloqueo duro; podrán volver como validación opcional configurable en una fase futura).

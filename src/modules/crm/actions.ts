@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { getCurrentPartner } from "@/modules/auth/service";
+import { AuthError, requireEditor } from "@/modules/auth/service";
 import {
   CrmError,
   createCompany,
@@ -24,9 +24,8 @@ import { FIELD_TYPES, FIT_LEVELS, STAGE_COLOR_NAMES } from "./types";
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function requirePartnerId(): Promise<string> {
-  const partner = await getCurrentPartner();
-  if (!partner) throw new CrmError("Sesión no válida.");
-  return partner.id;
+  const actor = await requireEditor();
+  return actor.partner.id;
 }
 
 async function run(fn: (partnerId: string) => Promise<void>): Promise<ActionResult> {
@@ -36,7 +35,9 @@ async function run(fn: (partnerId: string) => Promise<void>): Promise<ActionResu
     revalidatePath("/clientes");
     return { ok: true };
   } catch (err) {
-    if (err instanceof CrmError) return { ok: false, error: err.message };
+    if (err instanceof CrmError || err instanceof AuthError) {
+      return { ok: false, error: err.message };
+    }
     console.error("CRM action error:", err);
     return { ok: false, error: "Algo salió mal. Intenta de nuevo." };
   }
