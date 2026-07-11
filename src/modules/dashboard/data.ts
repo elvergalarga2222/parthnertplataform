@@ -1,4 +1,4 @@
-import type { DashboardTask, TeamMember } from "./types";
+import type { DashboardTask } from "./types";
 
 // Demo data layer for the Resumen dashboard.
 //
@@ -39,14 +39,4 @@ export async function getTasks(): Promise<DashboardTask[]> {
     },
   ];
 }
-
-export async function getTeam(): Promise<TeamMember[]> {
-  await simulateNetwork(200);
-  return [
-    { name: "Bagas Wirandi", role: "Head of Sales" },
-    { name: "Sir Dandy", role: "Operations Lead" },
-    { name: "Jhon Tosan", role: "Product Owner" },
-  ];
-}
-
 

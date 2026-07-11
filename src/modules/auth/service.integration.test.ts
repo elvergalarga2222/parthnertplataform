@@ -281,4 +281,65 @@ describe.skipIf(!hasDb)("auth freeze/unfreeze (integration)", () => {
       }
     });
   });
+
+  describe("getCurrentActor / requireEditor (PR-8)", () => {
+    async function makeCollaborator(
+      permission: "editor" | "lector",
+      status: "activo" | "desactivado" = "activo",
+    ) {
+      const { eq } = await import("drizzle-orm");
+      const [row] = await db
+        .insert(schema.collaborators)
+        .values({
+          partnerId,
+          email: `collab-${randomUUID()}@test.dev`,
+          displayName: "Test Collaborator",
+          permission,
+          status,
+        })
+        .returning({ id: schema.collaborators.id });
+      return {
+        id: row.id,
+        cleanup: () => db.delete(schema.collaborators).where(eq(schema.collaborators.id, row.id)),
+      };
+    }
+
+    it("returns null for a deactivated collaborator's session (revoked at once)", async () => {
+      const { id, cleanup } = await makeCollaborator("editor", "desactivado");
+      try {
+        await session.createCollaboratorSession(partnerId, id);
+        expect(await auth.getCurrentActor()).toBeNull();
+      } finally {
+        await cleanup();
+      }
+    });
+
+    it("returns null when the tenant partner is frozen, even mid-collaborator-session", async () => {
+      const { id, cleanup } = await makeCollaborator("editor");
+      try {
+        await session.createCollaboratorSession(partnerId, id);
+        await auth.freezePartner(partnerId, { adminEmail: "test@op.dev" });
+        expect(await auth.getCurrentActor()).toBeNull();
+      } finally {
+        await auth.unfreezePartner(partnerId, { adminEmail: "test@op.dev" });
+        await cleanup();
+      }
+    });
+
+    it("requireEditor rejects a lector collaborator but allows an editor", async () => {
+      const lector = await makeCollaborator("lector");
+      const editor = await makeCollaborator("editor");
+      try {
+        await session.createCollaboratorSession(partnerId, lector.id);
+        await expect(auth.requireEditor()).rejects.toThrow(/no autorizado/i);
+
+        await session.createCollaboratorSession(partnerId, editor.id);
+        const actor = await auth.requireEditor();
+        expect(actor.collaborator?.permission).toBe("editor");
+      } finally {
+        await lector.cleanup();
+        await editor.cleanup();
+      }
+    });
+  });
 });

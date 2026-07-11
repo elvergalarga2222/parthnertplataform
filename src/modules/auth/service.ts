@@ -1,11 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accessAuditLog, partners, skoolMemberships } from "@/db/schema";
+import { accessAuditLog, collaborators, partners, skoolMemberships } from "@/db/schema";
 import { toIsoOrNull } from "@/lib/dates";
 import { isAdminEmail } from "./admin";
 import type { Member } from "./membership-provider";
 import { getMembershipProvider } from "./providers";
-import { createSession, getSessionPartnerId, revokeAllSessions } from "./session";
+import { createSession, getSessionActor, revokeAllSessions } from "./session";
 
 export type LoginErrorCode = "not_member" | "frozen";
 
@@ -127,23 +127,82 @@ export async function loginWithEmail(email: string): Promise<Partner> {
   return completeLogin(partner, normalized, { adminBypass: true });
 }
 
+// ---------------------------------------------------------------------------
+// Actor (PR-8): quién actúa en la petición actual — el partner (tenant,
+// siempre) y, opcionalmente, el colaborador que inició sesión en su nombre.
+
+export interface Actor {
+  /** El TENANT — todo sigue filtrando por partner.id, actúe quien actúe. */
+  partner: Partner;
+  collaborator: {
+    id: string;
+    displayName: string;
+    permission: "editor" | "lector";
+  } | null;
+}
+
 /**
- * Partner de la petición actual, o null. Revalida el estado en la BD en cada
- * request: si el partner fue congelado, se le niega el acceso al instante aunque
- * la sesión siga viva en Redis.
+ * Actor de la petición actual, o null si: no hay sesión, el partner está
+ * congelado (regla #2 corta también a sus colaboradores), o el colaborador
+ * fue desactivado (mismo espíritu revocable al instante).
  */
-export async function getCurrentPartner(): Promise<Partner | null> {
-  const partnerId = await getSessionPartnerId();
-  if (!partnerId) return null;
+export async function getCurrentActor(): Promise<Actor | null> {
+  const session = await getSessionActor();
+  if (!session) return null;
 
   const [partner] = await db
     .select()
     .from(partners)
-    .where(eq(partners.id, partnerId))
+    .where(eq(partners.id, session.partnerId))
     .limit(1);
-
   if (!partner || partner.status !== "active") return null;
-  return partner;
+
+  if (!session.collaboratorId) return { partner, collaborator: null };
+
+  const [collaborator] = await db
+    .select()
+    .from(collaborators)
+    .where(eq(collaborators.id, session.collaboratorId))
+    .limit(1);
+  if (!collaborator || collaborator.status !== "activo") return null;
+
+  return {
+    partner,
+    collaborator: {
+      id: collaborator.id,
+      displayName: collaborator.displayName ?? collaborator.email,
+      permission: collaborator.permission as "editor" | "lector",
+    },
+  };
+}
+
+/**
+ * Partner (tenant) de la petición actual, o null. Se mantiene con su firma y
+ * semántica de siempre — reimplementado sobre getCurrentActor() para que
+ * ningún módulo existente cambie: lecturas de crm/workspace/finance/ai siguen
+ * scoped por este partner.id sin importar si quien actúa es el partner o un
+ * colaborador suyo. Las mutaciones que deben excluir a colaboradores
+ * `lector` (o a TODO colaborador) usan getCurrentActor()/requireEditor()
+ * directamente — ver auth/actions o los actions.ts de cada módulo.
+ */
+export async function getCurrentPartner(): Promise<Partner | null> {
+  const actor = await getCurrentActor();
+  return actor?.partner ?? null;
+}
+
+/**
+ * Exige un actor que pueda mutar: el partner mismo, o un colaborador
+ * `editor`. Lanza AuthError si no hay sesión o si el colaborador es
+ * `lector`. Usado por requirePartnerId()/run() de crm, workspace y finance
+ * para las mutaciones (las lecturas siguen abiertas a lectores).
+ */
+export async function requireEditor(): Promise<Actor> {
+  const actor = await getCurrentActor();
+  if (!actor) throw new AuthError("Sesión no válida.");
+  if (actor.collaborator && actor.collaborator.permission === "lector") {
+    throw new AuthError("No autorizado.");
+  }
+  return actor;
 }
 
 // ---------------------------------------------------------------------------

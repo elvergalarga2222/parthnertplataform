@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "./index";
 import {
+  collaborators,
   companies,
   contacts,
   customFields,
@@ -14,6 +16,8 @@ import {
   invoices,
   kanbanCards,
   kanbanColumns,
+  meetingAttendees,
+  meetings,
   partners,
   pipelineStages,
   workspaceProfiles,
@@ -62,6 +66,7 @@ async function main() {
     await seedGlobalAiPrompts();
     await seedFinanceDemo(partnerId);
     await seedFeedbackDemo(partnerId);
+    await seedTeamDemo(partnerId);
     return;
   }
 
@@ -249,6 +254,7 @@ async function main() {
   await seedGlobalAiPrompts();
   await seedFinanceDemo(partnerId);
   await seedFeedbackDemo(partnerId);
+  await seedTeamDemo(partnerId);
 
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
@@ -593,6 +599,62 @@ async function seedFeedbackDemo(partnerId: string) {
   ]);
 
   console.log("Feedback demo seeded: partner marcado tester, 2 reportes.");
+}
+
+async function seedTeamDemo(partnerId: string) {
+  const [existing] = await db
+    .select({ id: collaborators.id })
+    .from(collaborators)
+    .where(eq(collaborators.partnerId, partnerId))
+    .limit(1);
+  if (existing) {
+    console.log("Partner already has team data; skipping team seed.");
+    return;
+  }
+
+  const [editorRow] = await db
+    .insert(collaborators)
+    .values({
+      partnerId,
+      email: "editora.demo@partnermanager.dev",
+      displayName: "Camila Reyes",
+      roleTitle: "Head of Sales",
+      permission: "editor",
+      status: "activo",
+      acceptedAt: new Date(),
+      lastLoginAt: new Date(),
+    })
+    .returning({ id: collaborators.id });
+
+  // Invitación pendiente: token demo (nunca en claro fuera de un seed local).
+  const pendingToken = "demo-pending-invite-token";
+  await db.insert(collaborators).values({
+    partnerId,
+    email: "pendiente.demo@partnermanager.dev",
+    roleTitle: "Operaciones",
+    permission: "lector",
+    status: "invitado",
+    inviteTokenHash: createHash("sha256").update(pendingToken).digest("hex"),
+    inviteExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+  });
+
+  const [meetingRow] = await db
+    .insert(meetings)
+    .values({
+      partnerId,
+      title: "Sync semanal de equipo",
+      startsAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+      durationMinutes: 30,
+      note: "Revisar pipeline de la semana y bloqueos activos.",
+    })
+    .returning({ id: meetings.id });
+
+  await db.insert(meetingAttendees).values([
+    { meetingId: meetingRow.id, collaboratorId: null }, // el partner
+    { meetingId: meetingRow.id, collaboratorId: editorRow.id },
+  ]);
+
+  console.log("Team demo seeded: 2 colaboradores (1 editor activo, 1 invitación pendiente), 1 reunión.");
 }
 
 main()
