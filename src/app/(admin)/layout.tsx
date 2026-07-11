@@ -38,6 +38,12 @@ export default async function AdminLayout({
           >
             Partners
           </Link>
+          <Link
+            href="/admin/logs"
+            className="rounded-lg px-3 py-1.5 text-[12.5px] font-semibold text-ink-secondary transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            Logs
+          </Link>
         </nav>
         <div className="ml-auto flex items-center gap-3">
           <span className="text-[11.5px] text-ink-muted">{admin.email}</span>

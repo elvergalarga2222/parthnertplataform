@@ -9,7 +9,7 @@ import {
   unfreezePartner,
   type Partner,
 } from "@/modules/auth/service";
-import { AdminError } from "./service";
+import { AdminError, clearErrorLogs } from "./service";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -27,6 +27,7 @@ async function run(fn: (admin: Partner) => Promise<void>): Promise<ActionResult>
     await fn(admin);
     revalidatePath("/admin");
     revalidatePath("/admin/partners");
+    revalidatePath("/admin/logs");
     return { ok: true };
   } catch (err) {
     if (err instanceof AdminError || err instanceof AuthError) {
@@ -53,4 +54,10 @@ export async function unfreezePartnerAction(
   return run((admin) =>
     unfreezePartner(parsed.data, { adminEmail: admin.email }),
   );
+}
+
+export async function clearErrorLogsAction(): Promise<ActionResult> {
+  return run(async () => {
+    await clearErrorLogs();
+  });
 }

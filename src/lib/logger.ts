@@ -9,6 +9,12 @@
 //
 // In development the same data is printed in a compact human-readable form.
 // Never import this from a Client Component — it is server-only.
+//
+// Errors also get pushed to a small Redis ring buffer (best-effort, capped)
+// so the admin panel (/admin/logs) can show recent failures without SSH.
+// This NEVER changes the stdout format above — it is a side channel.
+
+import { getRedis } from "./redis";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -72,6 +78,61 @@ function emit(
   if (level === "error") console.error(line);
   else if (level === "warn") console.warn(line);
   else console.log(line);
+
+  // Solo errores (no warn: recomendación — ruido innecesario en un buffer
+  // acotado). Fire-and-forget: nunca puede retrasar ni romper al caller.
+  if (level === "error") pushToBuffer(record);
+}
+
+// --- Buffer de errores en Redis para el visor del panel admin --------------
+
+export const LOG_BUFFER_KEY = "logs:errors";
+const LOG_BUFFER_MAX = Number(process.env.LOG_BUFFER_MAX ?? 500);
+const LOG_BUFFER_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 días, renovado en cada push
+const MAX_STACK_CHARS = 4000;
+const MAX_MSG_CHARS = 2000;
+
+/** Trunca campos que podrían inflar el buffer (stacks largos, mensajes gigantes). */
+export function clipRecord(
+  record: Record<string, unknown>,
+): Record<string, unknown> {
+  const clipped: Record<string, unknown> = { ...record };
+  if (typeof clipped.msg === "string" && clipped.msg.length > MAX_MSG_CHARS) {
+    clipped.msg = clipped.msg.slice(0, MAX_MSG_CHARS);
+  }
+  const err = clipped.err;
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    clipped.err = {
+      ...e,
+      ...(typeof e.stack === "string"
+        ? { stack: e.stack.slice(0, MAX_STACK_CHARS) }
+        : {}),
+      ...(typeof e.message === "string"
+        ? { message: e.message.slice(0, MAX_MSG_CHARS) }
+        : {}),
+    };
+  }
+  return clipped;
+}
+
+function pushToBuffer(record: Record<string, unknown>): void {
+  // Nunca puede romper ni retrasar al caller: sin await, todo error tragado.
+  // Y jamás se loguea a sí mismo en fallo (bucle infinito prohibido).
+  try {
+    if (!process.env.REDIS_URL) return; // build/tests/dev sin Redis
+    const redis = getRedis();
+    const payload = JSON.stringify(clipRecord(record));
+    void redis
+      .multi()
+      .lpush(LOG_BUFFER_KEY, payload)
+      .ltrim(LOG_BUFFER_KEY, 0, LOG_BUFFER_MAX - 1)
+      .expire(LOG_BUFFER_KEY, LOG_BUFFER_TTL_SECONDS)
+      .exec()
+      .catch(() => {});
+  } catch {
+    /* jamás propagar: el logging no puede tumbar la request */
+  }
 }
 
 export const logger = {

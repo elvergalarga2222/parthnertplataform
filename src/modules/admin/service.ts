@@ -2,6 +2,8 @@ import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { partners } from "@/db/schema";
 import { toIsoOrEpoch, toIsoOrNull } from "@/lib/dates";
+import { LOG_BUFFER_KEY } from "@/lib/logger";
+import { getRedis } from "@/lib/redis";
 
 // Panel del OPERADOR — capa de composición (precedente: dashboard/). Es la
 // única zona legítimamente cross-tenant del sistema: puede leer tablas de
@@ -124,4 +126,74 @@ export async function getOverview(): Promise<AdminOverview> {
       costUsdTotal: toNumber(row.ai_cost_total),
     },
   };
+}
+
+// --- Visor de logs (PR-14) ---------------------------------------------------
+// Atajo rápido para errores menores sin entrar al VPS. NO reemplaza
+// pm2 logs/docker logs: el buffer es acotado (LOG_BUFFER_MAX, default 500) y
+// best-effort — solo captura desde que este visor se desplegó.
+
+export interface ErrorLogEntry {
+  time: string;
+  msg: string;
+  route: string | null;
+  partnerId: string | null;
+  digest: string | null;
+  requestId: string | null;
+  source: string | null;
+  boundary: string | null;
+  errName: string | null;
+  errMessage: string | null;
+  errStack: string | null;
+  raw: string;
+}
+
+function toEntry(raw: string): ErrorLogEntry {
+  try {
+    const r = JSON.parse(raw) as Record<string, unknown>;
+    const err = (r.err ?? {}) as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === "string" ? v : null);
+    return {
+      time: str(r.time) ?? new Date(0).toISOString(),
+      msg: str(r.msg) ?? "",
+      route: str(r.route),
+      partnerId: str(r.partnerId),
+      digest: str(r.digest),
+      requestId: str(r.requestId),
+      source: str(r.source),
+      boundary: str(r.boundary),
+      errName: str(err.name),
+      errMessage: str(err.message),
+      errStack: str(err.stack),
+      raw,
+    };
+  } catch {
+    // Una entrada corrupta se muestra como raw en vez de tumbar la vista.
+    return {
+      time: new Date(0).toISOString(),
+      msg: "(entrada corrupta)",
+      route: null,
+      partnerId: null,
+      digest: null,
+      requestId: null,
+      source: null,
+      boundary: null,
+      errName: null,
+      errMessage: null,
+      errStack: null,
+      raw,
+    };
+  }
+}
+
+/** Más reciente primero (LPUSH ya lo garantiza). */
+export async function getErrorLogs(): Promise<ErrorLogEntry[]> {
+  if (!process.env.REDIS_URL) return [];
+  const raws = await getRedis().lrange(LOG_BUFFER_KEY, 0, -1);
+  return raws.map(toEntry);
+}
+
+export async function clearErrorLogs(): Promise<void> {
+  if (!process.env.REDIS_URL) return;
+  await getRedis().del(LOG_BUFFER_KEY);
 }
