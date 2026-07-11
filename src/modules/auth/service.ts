@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accessAuditLog, partners } from "@/db/schema";
+import { accessAuditLog, partners, skoolMemberships } from "@/db/schema";
+import { toIsoOrNull } from "@/lib/dates";
 import { isAdminEmail } from "./admin";
 import { getMembershipProvider } from "./providers";
 import { createSession, getSessionPartnerId, revokeAllSessions } from "./session";
@@ -61,10 +62,17 @@ export async function loginWithEmail(email: string): Promise<Partner> {
       event: "login_blocked_frozen",
       detail: { email: normalized },
     });
-    throw new LoginError(
-      "frozen",
-      "Tu acceso está congelado. Contacta al administrador de la comunidad.",
-    );
+    // Copy distinto si el congelamiento fue automático por vencimiento de
+    // membresía (PR-10): la reactivación en ese caso es automática al renovar.
+    const [membership] = await db
+      .select({ alertState: skoolMemberships.alertState })
+      .from(skoolMemberships)
+      .where(eq(skoolMemberships.partnerId, partner.id));
+    const message =
+      membership?.alertState === "frozen_auto"
+        ? "Tu membresía de Skool venció. Renueva y tu cuenta se reactivará automáticamente."
+        : "Tu acceso está congelado. Contacta al administrador de la comunidad.";
+    throw new LoginError("frozen", message);
   }
 
   await db.insert(accessAuditLog).values({
@@ -157,4 +165,42 @@ export async function unfreezePartner(
     event: "partner_unfrozen",
     detail: { by: actor.adminEmail },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Alerta de vencimiento de membresía (PR-10)
+
+export interface MembershipAlert {
+  kind: "expiring";
+  daysLeft: number;
+  expiresAt: string;
+}
+
+const ALERT_WINDOW_DAYS = 15;
+
+/**
+ * Alerta in-app si la membresía Skool del partner vence en ≤15 días. Lee
+ * skool_memberships (poblada por el job de sincronización); null si no hay
+ * riesgo o no hay datos todavía.
+ */
+export async function getMembershipAlert(
+  partnerId: string,
+  now: Date = new Date(),
+): Promise<MembershipAlert | null> {
+  const [membership] = await db
+    .select({ accessExpiresAt: skoolMemberships.accessExpiresAt })
+    .from(skoolMemberships)
+    .where(eq(skoolMemberships.partnerId, partnerId));
+  if (!membership?.accessExpiresAt) return null;
+
+  const daysLeft = Math.ceil(
+    (membership.accessExpiresAt.getTime() - now.getTime()) / 86_400_000,
+  );
+  if (daysLeft < 0 || daysLeft > ALERT_WINDOW_DAYS) return null;
+
+  return {
+    kind: "expiring",
+    daysLeft,
+    expiresAt: toIsoOrNull(membership.accessExpiresAt) ?? "",
+  };
 }
