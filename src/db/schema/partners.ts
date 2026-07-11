@@ -1,11 +1,14 @@
 import { sql } from "drizzle-orm";
 import {
   bigserial,
+  boolean,
   check,
+  integer,
   jsonb,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -51,6 +54,20 @@ export const skoolMemberships = pgTable(
       .notNull()
       .defaultNow(),
     rawPayload: jsonb("raw_payload"),
+    // --- Ciclo de vida de la renovación (PR-10) ---
+    // Fin del periodo pagado según Skool; null si el provider no lo expone.
+    currentPeriodEndsAt: timestamp("current_period_ends_at", {
+      withTimezone: true,
+    }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    // Cuándo se pierde el acceso si no renueva (fin de periodo, o plan B:
+    // detección del churn + MEMBERSHIP_GRACE_DAYS).
+    accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
+    // Estado del ciclo de alerta — idempotencia del job (nunca re-alertar).
+    alertState: text("alert_state").notNull().default("none"),
+    // Fail-safe: nº de ejecuciones consecutivas del sync en las que el partner
+    // no apareció en la respuesta del provider. Solo se actúa al llegar a 3.
+    missingCount: integer("missing_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -62,6 +79,15 @@ export const skoolMemberships = pgTable(
     check(
       "skool_memberships_status_check",
       sql`${table.membershipStatus} IN ('active', 'churned', 'removed')`,
+    ),
+    check(
+      "skool_memberships_alert_state_check",
+      sql`${table.alertState} IN ('none', 'expiring_notified', 'frozen_auto')`,
+    ),
+    // Upsert idempotente del job de sincronización.
+    uniqueIndex("skool_memberships_partner_group_unique").on(
+      table.partnerId,
+      table.groupId,
     ),
   ],
 );

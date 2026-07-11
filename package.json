@@ -10,7 +10,8 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:seed": "tsx --env-file=.env src/db/seed.ts"
+    "db:seed": "tsx --env-file=.env src/db/seed.ts",
+    "jobs": "tsx --env-file=.env src/jobs/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

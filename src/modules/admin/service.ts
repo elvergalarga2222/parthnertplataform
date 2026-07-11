@@ -1,6 +1,6 @@
 import { desc, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { partners } from "@/db/schema";
+import { partners, skoolMemberships } from "@/db/schema";
 import { toIsoOrEpoch, toIsoOrNull } from "@/lib/dates";
 
 // Panel del OPERADOR — capa de composición (precedente: dashboard/). Es la
@@ -22,6 +22,8 @@ export interface AdminPartnerRow {
   deals: number;
   aiTokens30d: number;
   aiCostUsd30d: number;
+  /** "Activa" / "Vence en Xd" / "Congelada auto" / null si no hay datos (PR-10). */
+  membership: { label: string; daysLeft: number | null } | null;
 }
 
 function toNumber(value: unknown): number {
@@ -59,19 +61,47 @@ export async function listPartners(): Promise<AdminPartnerRow[]> {
     .from(partners)
     .orderBy(desc(partners.createdAt));
 
-  return rows.map(({ partner, lastLoginAt, ...agg }) => ({
-    id: partner.id,
-    email: partner.email,
-    displayName: partner.displayName,
-    status: partner.status as "active" | "frozen",
-    createdAt: toIsoOrEpoch(partner.createdAt),
-    // El subselect llega como string/Date según el driver; normalizar seguro.
-    lastLoginAt: lastLoginAt ? toIsoOrNull(new Date(lastLoginAt)) : null,
-    workspaces: toNumber(agg.workspaces),
-    deals: toNumber(agg.deals),
-    aiTokens30d: toNumber(agg.aiTokens30d),
-    aiCostUsd30d: toNumber(agg.aiCostUsd30d),
-  }));
+  const memberships = await db
+    .select({
+      partnerId: skoolMemberships.partnerId,
+      alertState: skoolMemberships.alertState,
+      accessExpiresAt: skoolMemberships.accessExpiresAt,
+    })
+    .from(skoolMemberships);
+  const membershipByPartner = new Map(memberships.map((m) => [m.partnerId, m]));
+
+  const now = Date.now();
+  return rows.map(({ partner, lastLoginAt, ...agg }) => {
+    const m = membershipByPartner.get(partner.id);
+    let membership: AdminPartnerRow["membership"] = null;
+    if (m) {
+      if (m.alertState === "frozen_auto") {
+        membership = { label: "Congelada auto", daysLeft: null };
+      } else if (m.accessExpiresAt) {
+        const daysLeft = Math.ceil((m.accessExpiresAt.getTime() - now) / 86_400_000);
+        membership =
+          daysLeft <= 15
+            ? { label: `Vence en ${Math.max(daysLeft, 0)}d`, daysLeft }
+            : { label: "Activa", daysLeft: null };
+      } else {
+        membership = { label: "Activa", daysLeft: null };
+      }
+    }
+    return {
+      id: partner.id,
+      email: partner.email,
+      displayName: partner.displayName,
+      status: partner.status as "active" | "frozen",
+      createdAt: toIsoOrEpoch(partner.createdAt),
+      // El subselect llega como string/Date según el driver; normalizar seguro.
+      lastLoginAt: lastLoginAt ? toIsoOrNull(new Date(lastLoginAt)) : null,
+      workspaces: toNumber(agg.workspaces),
+      deals: toNumber(agg.deals),
+      aiTokens30d: toNumber(agg.aiTokens30d),
+      aiCostUsd30d: toNumber(agg.aiCostUsd30d),
+      membership,
+    };
+  });
 }
 
 export interface AdminOverview {

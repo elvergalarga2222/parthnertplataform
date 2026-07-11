@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Snowflake, Sun } from "lucide-react";
+import { RefreshCw, Snowflake, Sun } from "lucide-react";
 import Modal from "@/components/system/Modal";
 import {
   freezePartnerAction,
+  syncMembershipsNowAction,
   unfreezePartnerAction,
 } from "@/modules/admin/actions";
 import type { AdminPartnerRow } from "@/modules/admin/service";
@@ -63,13 +64,28 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
     await runAction(() => unfreezePartnerAction(row.id));
   };
 
+  const syncNow = async () => {
+    await runAction(() => syncMembershipsNowAction());
+  };
+
   return (
-    <div className="overflow-x-auto rounded-2xl border border-edge bg-surface shadow-card">
-      <table className="w-full min-w-[880px] text-left text-[12.5px]">
+    <div className="flex flex-col gap-3">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={syncNow}
+        className="flex w-fit items-center gap-1.5 self-end rounded-xl border border-edge bg-surface px-3.5 py-2 text-[12px] font-semibold text-ink-secondary transition-colors hover:border-primary/50 hover:text-primary-soft disabled:opacity-50"
+        title="Encola (o corre inline sin Redis) el job de sincronización de membresías Skool ahora, sin esperar las 6h."
+      >
+        <RefreshCw size={13} /> Sincronizar membresías ahora
+      </button>
+      <div className="overflow-x-auto rounded-2xl border border-edge bg-surface shadow-card">
+      <table className="w-full min-w-[960px] text-left text-[12.5px]">
         <thead>
           <tr className="border-b border-edge text-[11px] uppercase tracking-widest text-ink-muted">
             <th className="px-4 py-3 font-semibold">Partner</th>
             <th className="px-4 py-3 font-semibold">Estado</th>
+            <th className="px-4 py-3 font-semibold">Membresía</th>
             <th className="px-4 py-3 font-semibold">Alta</th>
             <th className="px-4 py-3 font-semibold">Último login</th>
             <th className="px-4 py-3 font-semibold">Espacios</th>
@@ -100,6 +116,23 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
                 >
                   {row.status === "active" ? "Activo" : "Congelado"}
                 </span>
+              </td>
+              <td className="px-4 py-3">
+                {row.membership ? (
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                      row.membership.label === "Congelada auto"
+                        ? "bg-negative/15 text-negative"
+                        : row.membership.daysLeft !== null
+                          ? "bg-amber-400/15 text-amber-300"
+                          : "bg-positive/15 text-positive"
+                    }`}
+                  >
+                    {row.membership.label}
+                  </span>
+                ) : (
+                  <span className="text-ink-muted">—</span>
+                )}
               </td>
               <td className="px-4 py-3 text-ink-secondary">
                 {new Date(row.createdAt).toLocaleDateString("es-ES", {
@@ -147,6 +180,7 @@ export default function AdminPartnersTable({ partners }: { partners: Row[] }) {
           ))}
         </tbody>
       </table>
+      </div>
 
       {freezing && (
         <Modal

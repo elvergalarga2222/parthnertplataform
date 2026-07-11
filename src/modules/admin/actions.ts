@@ -9,6 +9,7 @@ import {
   unfreezePartner,
   type Partner,
 } from "@/modules/auth/service";
+import { syncMemberships } from "@/modules/auth/membership-sync";
 import { AdminError } from "./service";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -53,4 +54,22 @@ export async function unfreezePartnerAction(
   return run((admin) =>
     unfreezePartner(parsed.data, { adminEmail: admin.email }),
   );
+}
+
+/**
+ * "Sincronizar membresías ahora" — útil sin esperar las 6h del job repetible.
+ * Encola en BullMQ si REDIS_URL está disponible; si no, corre inline (mismo
+ * fallback síncrono que el resto de jobs del repo cuando Redis no está).
+ */
+export async function syncMembershipsNowAction(): Promise<ActionResult> {
+  return run(async () => {
+    if (process.env.REDIS_URL) {
+      const { createMembershipSyncQueue } = await import("@/jobs/queues");
+      const queue = createMembershipSyncQueue();
+      await queue.add("membership-sync", {});
+      await queue.close();
+    } else {
+      await syncMemberships();
+    }
+  });
 }

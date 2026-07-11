@@ -12,7 +12,9 @@ export default async function AdminPartnersPage() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4">
-      <h1 className="text-lg font-bold tracking-tight">Partners</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-bold tracking-tight">Partners</h1>
+      </div>
       <AdminPartnersTable partners={rows} />
     </div>
   );
