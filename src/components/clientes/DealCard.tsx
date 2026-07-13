@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, CalendarClock, FileWarning } from "lucide-react";
+import { Building2, CalendarClock, FileWarning, ListChecks } from "lucide-react";
 import type { DealView } from "@/modules/crm/types";
 import { formatMoney } from "@/modules/crm/helpers";
 import FitBadge from "./FitBadge";
@@ -17,9 +17,12 @@ function initials(name: string) {
 export default function DealCard({
   deal,
   overlay = false,
+  openTasksCount,
 }: {
   deal: DealView;
   overlay?: boolean;
+  /** Tareas abiertas vinculadas a este deal (PR-9, opcional). */
+  openTasksCount?: number;
 }) {
   return (
     <article
@@ -70,11 +73,25 @@ export default function DealCard({
         </div>
       )}
 
-      {deal.nextActivity && (
-        <p className="mt-2.5 flex items-center gap-1.5 border-t border-edge pt-2.5 text-[11px] text-ink-muted">
-          <CalendarClock size={11} className="shrink-0" />
-          <span className="truncate">{deal.nextActivity}</span>
-        </p>
+      {(deal.nextActivity || Boolean(openTasksCount)) && (
+        <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-edge pt-2.5 text-[11px] text-ink-muted">
+          {deal.nextActivity ? (
+            <p className="flex min-w-0 items-center gap-1.5">
+              <CalendarClock size={11} className="shrink-0" />
+              <span className="truncate">{deal.nextActivity}</span>
+            </p>
+          ) : (
+            <span />
+          )}
+          {Boolean(openTasksCount) && (
+            <span
+              title={`${openTasksCount} tarea(s) abierta(s)`}
+              className="flex shrink-0 items-center gap-1 rounded-full bg-primary-faint px-1.5 py-0.5 text-[10px] font-semibold text-primary-soft"
+            >
+              <ListChecks size={10} /> {openTasksCount}
+            </span>
+          )}
+        </div>
       )}
     </article>
   );

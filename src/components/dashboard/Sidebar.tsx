@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Bot,
   Briefcase,
+  CheckSquare,
   Home,
   LogOut,
   Settings,
@@ -19,6 +20,7 @@ import type { TeamMember } from "@/modules/dashboard/types";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Resumen", icon: Home },
   { href: "/clientes", label: "Clientes", icon: Users },
+  { href: "/tareas", label: "Tareas", icon: CheckSquare },
   { href: "/espacios", label: "Espacios de Trabajo", icon: LayoutGrid },
   { href: "/partner-business", label: "Partner Business", icon: Briefcase },
   { href: "/equipo", label: "Equipo", icon: Users2 },

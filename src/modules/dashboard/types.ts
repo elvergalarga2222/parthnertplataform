@@ -24,14 +24,6 @@ export interface Kpi {
     | { kind: "funnel"; stages: PipelineStage[]; dealsOpen: number };
 }
 
-export interface DashboardTask {
-  id: string;
-  title: string;
-  detail: string;
-  done: boolean;
-}
-
-
 export interface TeamMember {
   name: string;
   role: string;

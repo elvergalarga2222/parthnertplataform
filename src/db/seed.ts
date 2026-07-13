@@ -20,6 +20,7 @@ import {
   meetings,
   partners,
   pipelineStages,
+  tasks,
   workspaceProfiles,
   workspaces,
 } from "./schema";
@@ -67,6 +68,7 @@ async function main() {
     await seedFinanceDemo(partnerId);
     await seedFeedbackDemo(partnerId);
     await seedTeamDemo(partnerId);
+    await seedTasksDemo(partnerId);
     return;
   }
 
@@ -255,6 +257,7 @@ async function main() {
   await seedFinanceDemo(partnerId);
   await seedFeedbackDemo(partnerId);
   await seedTeamDemo(partnerId);
+  await seedTasksDemo(partnerId);
 
   // Sanity check for tenant scoping: nothing from this partner should be
   // visible when filtering by a different partner id.
@@ -655,6 +658,85 @@ async function seedTeamDemo(partnerId: string) {
   ]);
 
   console.log("Team demo seeded: 2 colaboradores (1 editor activo, 1 invitación pendiente), 1 reunión.");
+}
+
+async function seedTasksDemo(partnerId: string) {
+  const [existing] = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(eq(tasks.partnerId, partnerId))
+    .limit(1);
+  if (existing) {
+    console.log("Partner already has tasks; skipping tasks seed.");
+    return;
+  }
+
+  const [someDeal] = await db
+    .select({ id: deals.id })
+    .from(deals)
+    .where(eq(deals.partnerId, partnerId))
+    .limit(1);
+  const [someWorkspace] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.partnerId, partnerId))
+    .limit(1);
+  const [someCollaborator] = await db
+    .select({ id: collaborators.id })
+    .from(collaborators)
+    .where(and(eq(collaborators.partnerId, partnerId), eq(collaborators.status, "activo")))
+    .limit(1);
+
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 86_400_000).toISOString().slice(0, 10);
+  const inThreeDays = new Date(now.getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
+
+  await db.insert(tasks).values([
+    {
+      partnerId,
+      title: "Revisar propuesta enviada",
+      status: "pendiente",
+      priority: "alta",
+      dueDate: yesterday,
+      dealId: someDeal?.id ?? null,
+    },
+    {
+      partnerId,
+      title: "Preparar kickoff del espacio",
+      status: "pendiente",
+      priority: "media",
+      dueDate: inThreeDays,
+      workspaceId: someWorkspace?.id ?? null,
+      assigneeCollaboratorId: someCollaborator?.id ?? null,
+    },
+    {
+      partnerId,
+      title: "Actualizar guion de ventas",
+      status: "en_progreso",
+      priority: "baja",
+    },
+    {
+      partnerId,
+      title: "Revisar métricas de IA del mes",
+      status: "pendiente",
+    },
+    {
+      partnerId,
+      title: "Llamar a referido de Instagram",
+      status: "hecha",
+      completedAt: now,
+    },
+    {
+      partnerId,
+      title: "Configurar Basic Auth de staging",
+      status: "hecha",
+      completedAt: now,
+    },
+  ]);
+
+  console.log(
+    "Tasks demo seeded: 6 tareas (mezcla de estados/prioridades, 1 vencida, 1 con deal, 1 con workspace).",
+  );
 }
 
 main()

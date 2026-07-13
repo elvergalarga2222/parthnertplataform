@@ -1,6 +1,5 @@
-import { getCurrentPartner } from "@/modules/auth/service";
+import { getCurrentActor } from "@/modules/auth/service";
 import { getDashboardKpis } from "@/modules/dashboard/kpis";
-import { getTasks } from "@/modules/dashboard/data";
 import {
   getMonthlyGoalProgress,
   getWeeklyRevenue,
@@ -8,16 +7,17 @@ import {
 } from "@/modules/finance/service";
 import { currentMonthUtc } from "@/modules/finance/snapshot";
 import type { Currency } from "@/modules/finance/types";
+import { listTasks } from "@/modules/tasks/service";
 import ResumenClient from "@/components/dashboard/ResumenClient";
 
 export const metadata = { title: "Resumen · Partner Manager" };
 
 export default async function DashboardPage() {
-  // El layout (app) ya garantiza que hay un partner activo; lo recuperamos para
-  // el saludo del panel de estadística y para calcular los datos reales.
-  const partner = await getCurrentPartner();
+  // El layout (app) ya garantiza que hay un partner (o colaborador) activo.
+  const actor = await getCurrentActor();
+  const partner = actor?.partner ?? null;
   const firstName =
-    partner?.displayName?.split(" ")[0] ??
+    (actor?.collaborator ? actor.collaborator.displayName : partner?.displayName)?.split(" ")[0] ??
     partner?.email.split("@")[0] ??
     "Partner";
 
@@ -26,16 +26,19 @@ export default async function DashboardPage() {
       ? partner.defaultCurrency
       : "USD";
 
-  // Todo server-side y en paralelo — el dashboard ya no carga demos por efecto.
-  // (La lista de tareas sigue siendo demo hasta PR-9; ver nota en el PR.)
-  const [kpis, goal, weekly, tasks] = partner
+  // Todo server-side y en paralelo. "Mis tareas abiertas" es del ACTOR (el
+  // colaborador logueado, o el partner si assigneeId=null); "tareas de
+  // clientes" (PR-11 Fase B, absorbida por PR-9) son todas las abiertas
+  // vinculadas a un deal/workspace, sin importar a quién estén asignadas.
+  const [kpis, goal, weekly, myTasks, clientTasks] = partner
     ? await Promise.all([
         getDashboardKpis(partner),
         getMonthlyGoalProgress(partner.id, currency, currentMonthUtc()),
         getWeeklyRevenue(partner.id, currency),
-        getTasks(),
+        listTasks(partner.id, { assigneeId: actor!.collaborator?.id ?? null }),
+        listTasks(partner.id, { status: "abiertas", linked: true }),
       ])
-    : [[], null, [], []];
+    : [[], null, [], [], []];
 
   return (
     <ResumenClient
@@ -44,7 +47,8 @@ export default async function DashboardPage() {
       goal={goal}
       weekly={weekly}
       currency={currency}
-      tasks={tasks}
+      tasks={myTasks.slice(0, 6)}
+      clientTasks={clientTasks.slice(0, 8)}
     />
   );
 }
