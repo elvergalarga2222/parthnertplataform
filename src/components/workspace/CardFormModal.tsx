@@ -44,6 +44,11 @@ export default function CardFormModal({
   const [columnId, setColumnId] = useState(
     card?.columnId ?? defaultColumnId ?? orderedColumns[0]?.id ?? "",
   );
+  // Fail-closed, igual que el DEFAULT false del esquema: una tarjeta nueva nace
+  // sin publicar aunque el Partner no toque nada.
+  const [isClientVisible, setIsClientVisible] = useState(
+    card?.isClientVisible ?? false,
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,6 +63,7 @@ export default function CardFormModal({
             description: description || null,
             assignee: assignee || null,
             dueDate: dueDate || null,
+            isClientVisible,
           }),
       );
     } else if (card) {
@@ -72,6 +78,7 @@ export default function CardFormModal({
                   description: description || null,
                   assignee: assignee || null,
                   dueDate: dueDate || null,
+                  isClientVisible,
                 }
               : c,
           ),
@@ -83,6 +90,7 @@ export default function CardFormModal({
             description: description || null,
             assignee: assignee || null,
             dueDate: dueDate || null,
+            isClientVisible,
           }),
       );
     }
@@ -162,6 +170,24 @@ export default function CardFormModal({
             />
           </label>
         </div>
+
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-edge bg-surface-2 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={isClientVisible}
+            onChange={(e) => setIsClientVisible(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[12.5px] font-semibold text-ink">
+              Visible para el cliente
+            </span>
+            <span className="text-[11.5px] leading-relaxed text-ink-secondary">
+              Aparecerá en el enlace público con su título, descripción y fecha.
+              El responsable nunca se comparte.
+            </span>
+          </span>
+        </label>
 
         <div className="flex items-center gap-2">
           {mode === "edit" && (

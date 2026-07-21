@@ -29,6 +29,8 @@ export interface WorkspaceCardView {
   assignee: string | null;
   dueDate: string | null;
   position: number;
+  /** Regla #7: si la tarjeta aparece en la vista pública de cliente. */
+  isClientVisible: boolean;
 }
 
 export interface WorkspaceProfileView {
@@ -52,6 +54,39 @@ export interface WorkspaceSnapshot {
   profile: WorkspaceProfileView;
   /** Última generación IA de tipo 'estrategia' del workspace (para sembrar el doc). */
   latestStrategyGeneration: { outputText: string; createdAt: string } | null;
+  /** Estado del enlace público (regla #7). Nunca incluye el token. */
+  clientView: ClientViewShareState;
+}
+
+// --- Vista de Cliente (regla #7) ---------------------------------------------
+// Modelos deliberadamente distintos a los del Partner: lo que no está en estas
+// interfaces no puede filtrarse por el enlace público, aunque el servicio
+// cambie. Sin `assignee` (operación interna), sin SOPs, sin perfil, sin IA.
+
+export interface ClientViewCard {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+}
+
+export interface ClientViewColumn {
+  id: string;
+  name: string;
+  cards: ClientViewCard[];
+}
+
+export interface ClientView {
+  clientName: string;
+  columns: ClientViewColumn[];
+}
+
+/** Estado del enlace compartido, para la UI del Partner. */
+export interface ClientViewShareState {
+  enabled: boolean;
+  /** true si ya se generó un token (el valor en claro no es recuperable). */
+  hasToken: boolean;
+  visibleCardCount: number;
 }
 
 // --- Export (PR-13) ----------------------------------------------------------

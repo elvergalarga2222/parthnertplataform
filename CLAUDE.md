@@ -56,7 +56,7 @@ src/
 4. **Pipeline configurable por Partner.** Las etapas se crean, renombran, reordenan y eliminan desde la UI sin tocar código. Los gates SOBA/NOVA dejaron de ser bloqueo duro; volvió una versión mínima: una etapa puede exigir brief para entrar (`pipeline_stages.requires_brief`, PR-12).
 5. **Campos personalizados sin migraciones.** `custom_fields` + `custom_field_values` (EAV) permiten al Partner añadir columnas desde la UI. El catálogo cerrado de industrias queda diferido.
 6. **La plataforma nunca paga tokens de IA.** Resolución de key: BYOK del Partner → créditos prepagados → error 402. Límite mensual por partner (`ai_usage_limits`). La key se guarda cifrada AES-256-GCM (`ai/crypto.ts`), nunca en texto plano.
-7. **Vista de Cliente capada.** La ruta pública por token solo expone `kanban_cards` con `is_client_visible = true`, read-only. Nada más (ni feedback, ni finanzas) se expone por token.
+7. **Vista de Cliente capada.** La ruta pública `/vista-cliente/[token]` (sin sesión, read-only) solo expone las `kanban_cards` con `is_client_visible = true` del workspace al que apunta el token. El flag es **fail-closed**: `DEFAULT false`, el Partner marca explícitamente qué publica. El token se resuelve **solo por su SHA-256** (`workspaces.client_view_token_hash`, único; el claro se muestra una vez y no se recupera) — nunca por un `workspaceId` de la URL, que permitiría enumerar espacios ajenos. `workspaces.client_view_enabled` apaga el enlace sin rotarlo; `rotateClientViewToken` lo invalida. No hay TTL a propósito: es un enlace de consulta de meses y el control es rotar/apagar. Congelar al Partner corta también el enlace (regla #2). El payload se proyecta sobre los tipos `ClientView*`, que no tienen `assignee` (operación interna), ni SOPs, ni perfil, ni generaciones de IA; nada más (ni feedback, ni finanzas) se expone por token.
 
 ## Modelo de identidad (Actor)
 
@@ -64,11 +64,11 @@ src/
 
 ## Base de datos
 
-Esquema en `src/db/schema/*.ts`; migraciones 0000–0013 en `src/db/migrations/`. Tablas por dominio:
+Esquema en `src/db/schema/*.ts`; migraciones 0000–0015 en `src/db/migrations/`. Tablas por dominio:
 
 - **partners** (`partners.ts`): `partners`, `skool_memberships` (ciclo de renovación + alertas, PR-10), `access_audit_log`.
 - **crm** (`crm.ts`): `companies`, `contacts`, `pipeline_stages`, `deals`, `deal_activity`, `custom_fields`, `custom_field_values`, `lists` (segmentos guardados; tabla lista, CRUD UI pendiente).
-- **workspace** (`workspace.ts`): `workspaces` (auto-creados por trigger cuando un deal entra a etapa `is_won`), `workspace_profiles` (perfil + doc de estrategia), `kanban_columns` (con SOP), `kanban_cards` (`is_client_visible`).
+- **workspace** (`workspace.ts`): `workspaces` (auto-creados por trigger cuando un deal entra a etapa `is_won`; `client_view_token_hash` + `client_view_enabled` para la vista pública, PR-17), `workspace_profiles` (perfil + doc de estrategia), `kanban_columns` (con SOP), `kanban_cards` (`is_client_visible`, default `false`).
 - **finance** (`finance.ts`): `budget_projections` (meta de profit mensual), `invoices` (cuentas por cobrar, `external_ref` idempotente para n8n, tipo de ingreso para 70/30), `expenses`. Multi-moneda por registro (COP/USD/EUR), **sin conversión automática** — las vistas agregan por moneda.
 - **ai** (`ai.ts`): `ai_prompts` (globales o por partner), `ai_generations` (auditoría + costo que consume `v_monthly_profit`), `ai_usage_limits`, `ai_partner_keys` (BYOK cifrada).
 - **team** (`team.ts`): `collaborators`, `meetings`, `meeting_attendees` (PR-8).
@@ -127,7 +127,7 @@ npm run db:seed      # seed demo del CRM (partner demo, etapas, deals); idempote
 | 0 | Scaffolding: Next.js, Drizzle, Redis, CI | ✅ Hecho |
 | 1 | Gating Skool: login, congelamiento, polling, alertas de renovación | 🟨 Login + congelamiento (manual vía panel admin y automático por vencimiento) + polling cada 6 h listos. **Falta:** webhook entrante de Skool y login-hardening |
 | 2 | CRM: empresas/contactos/deals, pipeline configurable, campos custom, gate de brief | 🟨 Pipeline kanban, deals, campos custom y gate de brief (PR-12) listos. **Falta:** inbox, listas guardadas (tabla lista), automatizaciones |
-| 3 | Workspace: kanban, SOPs, perfil, doc de estrategia exportable | 🟨 Kanban, SOPs, perfil y export a PDF (PR-13) listos. **Falta:** vista pública de cliente por token |
+| 3 | Workspace: kanban, SOPs, perfil, doc de estrategia exportable | ✅ Kanban, SOPs, perfil, export a PDF (PR-13) y vista pública de cliente por token (PR-17) listos |
 | 4 | Finanzas: 70/30, cuentas por cobrar, margen, calendario de cobros | 🟨 PR-4a (modelo multi-moneda, vistas revenue/profit, webhook n8n, KPIs+alertas) y PR-4b (UI: invoices, expenses, budget, calendario, 70/30, meta mensual) listos |
 | 5 | IA: gateway BYOK, guiones, copiloto de diagnóstico | 🟨 BYOK + cuotas + generación de guiones/estrategia/diagnóstico embebidos en el workspace. **Falta:** editor de guiones dedicado e imágenes |
 | 6 | Academia: videos, RAG, bot "Mi Cabeza" | ⬜ Pendiente (ruta `/academia` es placeholder) |

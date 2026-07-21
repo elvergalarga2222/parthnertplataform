@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -5,11 +6,14 @@ import {
   deals,
   kanbanCards,
   kanbanColumns,
+  partners,
   workspaceProfiles,
   workspaces,
 } from "@/db/schema";
 import { toIsoOrEpoch } from "@/lib/dates";
 import type {
+  ClientView,
+  ClientViewShareState,
   WorkspaceCardView,
   WorkspaceColumnView,
   WorkspaceExport,
@@ -119,6 +123,7 @@ export async function getWorkspaceSnapshot(
         assignee: c.assignee,
         dueDate: c.dueDate,
         position: c.position,
+        isClientVisible: c.isClientVisible,
       }),
     ),
     profile: toProfileView(profile),
@@ -126,6 +131,11 @@ export async function getWorkspaceSnapshot(
       partnerId,
       workspaceId,
     ),
+    clientView: {
+      enabled: ws.clientViewEnabled,
+      hasToken: ws.clientViewTokenHash !== null,
+      visibleCardCount: cardRows.filter((c) => c.isClientVisible).length,
+    },
   };
 }
 
@@ -412,6 +422,7 @@ export async function createCard(
     description?: string | null;
     assignee?: string | null;
     dueDate?: string | null;
+    isClientVisible?: boolean;
   },
 ): Promise<string> {
   await requireWorkspace(partnerId, workspaceId);
@@ -443,6 +454,8 @@ export async function createCard(
       assignee: input.assignee ?? null,
       dueDate: input.dueDate ?? null,
       position: nextPosition,
+      // Fail-closed: si el caller no lo pide, la tarjeta nace privada.
+      isClientVisible: input.isClientVisible ?? false,
     })
     .returning({ id: kanbanCards.id });
   return row.id;
@@ -456,6 +469,7 @@ export async function updateCard(
     description?: string | null;
     assignee?: string | null;
     dueDate?: string | null;
+    isClientVisible?: boolean;
   },
 ): Promise<void> {
   const result = await db
@@ -553,4 +567,167 @@ export async function moveCard(
       }
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Vista de Cliente (regla #7)
+//
+// Única superficie de la plataforma que se lee SIN sesión, así que el contrato
+// es más estricto que el del resto del módulo:
+//   - el token es el ÚNICO identificador aceptado (nunca un workspaceId de la
+//     URL, que permitiría enumerar espacios de otros partners);
+//   - en BD solo vive su SHA-256, igual que collaborators.invite_token_hash;
+//   - se filtra por is_client_visible = true y se proyectan solo los campos de
+//     ClientViewCard — `assignee`, SOPs, perfil y generaciones de IA nunca
+//     salen por aquí.
+
+function hashClientViewToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Resuelve el enlace público. Devuelve null (→ 404, sin distinguir causa) si el
+ * token no existe, si el Partner apagó la vista, o si el partner dueño está
+ * congelado — regla #2: congelar corta también lo que ya se compartió.
+ */
+export async function getClientViewByToken(
+  token: string,
+): Promise<ClientView | null> {
+  // Un token vacío hashea a un valor válido y podría casar con una fila que
+  // tuviera ese hash; cortamos antes de tocar la BD.
+  if (!token) return null;
+
+  const [ws] = await db
+    .select({
+      id: workspaces.id,
+      clientName: workspaces.clientName,
+      enabled: workspaces.clientViewEnabled,
+      partnerStatus: partners.status,
+    })
+    .from(workspaces)
+    .innerJoin(partners, eq(workspaces.partnerId, partners.id))
+    .where(eq(workspaces.clientViewTokenHash, hashClientViewToken(token)));
+
+  if (!ws || !ws.enabled || ws.partnerStatus === "frozen") return null;
+
+  // Se traen columnas y tarjetas del workspace resuelto por token. El filtro
+  // is_client_visible va en el WHERE, no en el .map(), para que una tarjeta
+  // privada no llegue nunca al proceso de Node.
+  const columnRows = await db
+    .select({
+      id: kanbanColumns.id,
+      name: kanbanColumns.name,
+      position: kanbanColumns.position,
+    })
+    .from(kanbanColumns)
+    .where(eq(kanbanColumns.workspaceId, ws.id))
+    .orderBy(asc(kanbanColumns.position), asc(kanbanColumns.createdAt));
+
+  const cardRows = await db
+    .select({
+      id: kanbanCards.id,
+      columnId: kanbanCards.columnId,
+      title: kanbanCards.title,
+      description: kanbanCards.description,
+      dueDate: kanbanCards.dueDate,
+    })
+    .from(kanbanCards)
+    .where(
+      and(
+        eq(kanbanCards.workspaceId, ws.id),
+        eq(kanbanCards.isClientVisible, true),
+      ),
+    )
+    .orderBy(asc(kanbanCards.position), asc(kanbanCards.createdAt));
+
+  return {
+    clientName: ws.clientName,
+    columns: columnRows.map((col) => ({
+      id: col.id,
+      name: col.name,
+      cards: cardRows
+        .filter((card) => card.columnId === col.id)
+        .map((card) => ({
+          id: card.id,
+          title: card.title,
+          description: card.description,
+          dueDate: card.dueDate,
+        })),
+    })),
+  };
+}
+
+export async function getClientViewShareState(
+  partnerId: string,
+  workspaceId: string,
+): Promise<ClientViewShareState> {
+  const ws = await requireWorkspace(partnerId, workspaceId);
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(kanbanCards)
+    .where(
+      and(
+        eq(kanbanCards.workspaceId, workspaceId),
+        eq(kanbanCards.isClientVisible, true),
+      ),
+    );
+
+  return {
+    enabled: ws.clientViewEnabled,
+    hasToken: ws.clientViewTokenHash !== null,
+    visibleCardCount: count,
+  };
+}
+
+/**
+ * Genera un token nuevo e invalida el anterior. Devuelve el valor en claro —
+ * es la única vez que existe fuera del navegador del cliente, así que el caller
+ * debe mostrarlo y olvidarlo.
+ */
+export async function rotateClientViewToken(
+  partnerId: string,
+  workspaceId: string,
+): Promise<string> {
+  await requireWorkspace(partnerId, workspaceId);
+  const token = randomBytes(32).toString("base64url");
+
+  await db
+    .update(workspaces)
+    .set({
+      clientViewTokenHash: hashClientViewToken(token),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(workspaces.id, workspaceId), eq(workspaces.partnerId, partnerId)));
+
+  return token;
+}
+
+/**
+ * Enciende o apaga el enlace sin rotarlo. Apagar es reversible y conserva el
+ * token; para invalidarlo de verdad hay que rotar.
+ */
+export async function setClientViewEnabled(
+  partnerId: string,
+  workspaceId: string,
+  enabled: boolean,
+): Promise<void> {
+  const ws = await requireWorkspace(partnerId, workspaceId);
+  if (enabled && !ws.clientViewTokenHash) {
+    throw new WorkspaceError(
+      "Genera primero un enlace para poder activar la vista de cliente.",
+    );
+  }
+  await db
+    .update(workspaces)
+    .set({ clientViewEnabled: enabled, updatedAt: new Date() })
+    .where(and(eq(workspaces.id, workspaceId), eq(workspaces.partnerId, partnerId)));
+}
+
+/** Marca/desmarca una tarjeta como visible para el cliente. */
+export async function setCardClientVisibility(
+  partnerId: string,
+  cardId: string,
+  isClientVisible: boolean,
+): Promise<void> {
+  await updateCard(partnerId, cardId, { isClientVisible });
 }

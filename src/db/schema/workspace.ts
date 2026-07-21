@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
   index,
@@ -28,6 +29,13 @@ export const workspaces = pgTable(
     dealId: uuid("deal_id").references(() => deals.id, { onDelete: "set null" }),
     clientName: text("client_name").notNull(),
     status: text("status").notNull().default("activo"),
+    // Vista de Cliente (regla #7): enlace público read-only por token.
+    // Solo se guarda el SHA-256 del token; el valor en claro se muestra una vez
+    // al Partner y no se puede recuperar (mismo patrón que
+    // collaborators.invite_token_hash). Sin caducidad a propósito: el control
+    // es rotar el token o apagar el flag, no un TTL.
+    clientViewTokenHash: text("client_view_token_hash"),
+    clientViewEnabled: boolean("client_view_enabled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -39,6 +47,11 @@ export const workspaces = pgTable(
     index("workspaces_partner_idx").on(table.partnerId),
     // One workspace per deal: makes the auto-create trigger idempotent.
     uniqueIndex("workspaces_deal_unique").on(table.dealId),
+    // Public client-view lookup happens by hash alone (there is no session to
+    // scope by), so the hash must be globally unique.
+    uniqueIndex("workspaces_client_view_token_hash_unique").on(
+      table.clientViewTokenHash,
+    ),
     check(
       "workspaces_status_check",
       sql`${table.status} IN ('activo', 'pausado', 'finalizado')`,
@@ -105,6 +118,10 @@ export const kanbanCards = pgTable(
     assignee: text("assignee"),
     dueDate: date("due_date"),
     position: integer("position").notNull().default(0),
+    // Regla #7: capado fail-closed. Una tarjeta solo llega a la vista pública
+    // de cliente si el Partner la marca explícitamente. El default es false
+    // para que la migración no publique retroactivamente nada.
+    isClientVisible: boolean("is_client_visible").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
