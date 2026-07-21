@@ -11,6 +11,9 @@ import {
   deleteColumn,
   moveCard,
   reorderColumns,
+  rotateClientViewToken,
+  setCardClientVisibility,
+  setClientViewEnabled,
   updateCard,
   updateColumn,
   updateWorkspaceProfile,
@@ -137,6 +140,7 @@ const cardSchema = z.object({
   description: z.string().trim().max(2000).nullish(),
   assignee: z.string().trim().max(80).nullish(),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+  isClientVisible: z.boolean().optional(),
 });
 
 export async function createCardAction(
@@ -166,6 +170,7 @@ export async function updateCardAction(input: {
       description: z.string().trim().max(2000).nullish(),
       assignee: z.string().trim().max(80).nullish(),
       dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish(),
+      isClientVisible: z.boolean().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Datos inválidos." };
@@ -191,4 +196,57 @@ export async function moveCardAction(input: {
   return run((pid) =>
     moveCard(pid, parsed.data.cardId, parsed.data.columnId, parsed.data.position),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vista de Cliente (regla #7)
+
+export async function setCardVisibilityAction(input: {
+  cardId: string;
+  isClientVisible: boolean;
+}): Promise<ActionResult> {
+  const parsed = z
+    .object({ cardId: uuid, isClientVisible: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Datos inválidos." };
+  return run((pid) =>
+    setCardClientVisibility(pid, parsed.data.cardId, parsed.data.isClientVisible),
+  );
+}
+
+export async function setClientViewEnabledAction(input: {
+  workspaceId: string;
+  enabled: boolean;
+}): Promise<ActionResult> {
+  const parsed = z
+    .object({ workspaceId: uuid, enabled: z.boolean() })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Datos inválidos." };
+  return run((pid) =>
+    setClientViewEnabled(pid, parsed.data.workspaceId, parsed.data.enabled),
+  );
+}
+
+/**
+ * Rota el enlace y devuelve el token en claro. No usa `run()` porque necesita
+ * devolver un valor: es la única vez que el token existe fuera de la BD, así
+ * que el caller debe mostrarlo al Partner y no persistirlo.
+ */
+export async function rotateClientViewTokenAction(
+  workspaceId: string,
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  const parsed = uuid.safeParse(workspaceId);
+  if (!parsed.success) return { ok: false, error: "Espacio inválido." };
+  try {
+    const actor = await requireEditor();
+    const token = await rotateClientViewToken(actor.partner.id, parsed.data);
+    revalidatePath("/espacios");
+    return { ok: true, token };
+  } catch (err) {
+    if (err instanceof WorkspaceError || err instanceof AuthError) {
+      return { ok: false, error: err.message };
+    }
+    console.error("Workspace action error:", err);
+    return { ok: false, error: "Algo salió mal. Intenta de nuevo." };
+  }
 }
