@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { getClientViewByToken } from "@/modules/workspace/service";
 import ClientViewBoard from "@/components/workspace/ClientViewBoard";
 
@@ -21,21 +22,11 @@ export default async function VistaClientePage({
   const { token } = await params;
   const view = await getClientViewByToken(token);
 
-  // Un solo mensaje para "no existe", "desactivado" y "partner congelado": no
-  // se le confirma a quien prueba tokens que alguno haya sido válido.
-  if (!view) {
-    return (
-      <div className="flex flex-1 items-center justify-center bg-base px-4">
-        <div className="w-full max-w-sm rounded-2xl border border-edge bg-surface p-6 text-center shadow-card">
-          <h1 className="text-[16px] font-bold text-ink">Enlace no disponible</h1>
-          <p className="mt-2 text-[13px] leading-relaxed text-ink-secondary">
-            Este enlace no es válido o fue desactivado. Pídele uno nuevo a tu
-            estratega.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // 404 real (no un 200 con mensaje) para "no existe", "desactivado" y
+  // "partner congelado" por igual: el status no debe revelar que un token
+  // llegó a ser válido, y un recurso inexistente no debe responder 200.
+  // El copy vive en not-found.tsx de este segmento.
+  if (!view) notFound();
 
   return <ClientViewBoard view={view} />;
 }

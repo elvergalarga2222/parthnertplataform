@@ -131,6 +131,11 @@ export async function getWorkspaceSnapshot(
       partnerId,
       workspaceId,
     ),
+    clientView: {
+      enabled: ws.clientViewEnabled,
+      hasToken: ws.clientViewTokenHash !== null,
+      visibleCardCount: cardRows.filter((c) => c.isClientVisible).length,
+    },
   };
 }
 

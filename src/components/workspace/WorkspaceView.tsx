@@ -19,6 +19,7 @@ import WorkspaceKanban from "./WorkspaceKanban";
 import WorkspaceProfileForm from "./WorkspaceProfileForm";
 import ColumnsModal from "./ColumnsModal";
 import StrategyDocSection from "./StrategyDocSection";
+import ClientViewSharePanel from "./ClientViewSharePanel";
 import AiPanel from "./ai/AiPanel";
 import CardFormModal from "./CardFormModal";
 import SopPanel from "./SopPanel";
@@ -215,6 +216,11 @@ export default function WorkspaceView({
               workspaceId={data.id}
               strategyDoc={data.profile.strategyDoc}
               latestStrategyGeneration={data.latestStrategyGeneration}
+              runAction={runAction}
+            />
+            <ClientViewSharePanel
+              workspaceId={data.id}
+              state={data.clientView}
               runAction={runAction}
             />
           </div>

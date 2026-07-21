@@ -162,6 +162,7 @@ export async function updateCardAction(input: {
   description?: string | null;
   assignee?: string | null;
   dueDate?: string | null;
+  isClientVisible?: boolean;
 }): Promise<ActionResult> {
   const parsed = z
     .object({

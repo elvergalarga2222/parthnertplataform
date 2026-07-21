@@ -54,6 +54,8 @@ export interface WorkspaceSnapshot {
   profile: WorkspaceProfileView;
   /** Última generación IA de tipo 'estrategia' del workspace (para sembrar el doc). */
   latestStrategyGeneration: { outputText: string; createdAt: string } | null;
+  /** Estado del enlace público (regla #7). Nunca incluye el token. */
+  clientView: ClientViewShareState;
 }
 
 // --- Vista de Cliente (regla #7) ---------------------------------------------
