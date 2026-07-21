@@ -2,15 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { MoreHorizontal, Target } from "lucide-react";
-import type { Kpi, DashboardTask } from "@/modules/dashboard/types";
+import type { Kpi } from "@/modules/dashboard/types";
 import type { WeeklyRevenue } from "@/modules/finance/service";
 import type { Currency, MonthlyGoalProgress } from "@/modules/finance/types";
+import type { TaskView } from "@/modules/tasks/types";
+import { setTaskStatusAction } from "@/modules/tasks/actions";
 import { formatMoney } from "@/lib/format";
 import KpiCard from "./KpiCard";
 import GoalRing from "./GoalRing";
 import WeeklyIncomeChart from "./WeeklyIncomeChart";
 import TaskList from "./TaskList";
+import UpcomingClientTasks from "./UpcomingClientTasks";
 
 function greeting(name: string) {
   const h = new Date().getHours();
@@ -26,24 +30,36 @@ export default function ResumenClient({
   weekly,
   currency,
   tasks: initialTasks,
+  clientTasks,
 }: {
   userName: string;
   kpis: Kpi[];
   goal: MonthlyGoalProgress | null;
   weekly: WeeklyRevenue[];
   currency: Currency;
-  tasks: DashboardTask[];
+  tasks: TaskView[];
+  clientTasks: TaskView[];
 }) {
-  // Las tareas siguen siendo demo hasta PR-9; el toggle es solo local.
+  const router = useRouter();
   const [tasks, setTasks] = useState(initialTasks);
-  const toggleTask = (id: string) =>
-    setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
+  const [prevTasks, setPrevTasks] = useState(initialTasks);
+  if (initialTasks !== prevTasks) {
+    setPrevTasks(initialTasks);
+    setTasks(initialTasks);
+  }
+
+  const toggleTask = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    const status = task.status === "hecha" ? "pendiente" : "hecha";
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
+    const result = await setTaskStatusAction({ taskId: id, status });
+    if (result.ok) router.refresh();
+  };
 
   return (
     <div className="grid grid-cols-1 gap-6 p-6 pt-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-      {/* Center column: solo lo accionable — facturación y profit. */}
+      {/* Center column: solo lo accionable — facturación, profit y tareas de clientes. */}
       <div className="flex min-w-0 flex-col gap-8">
         <section
           aria-label="Indicadores del mes"
@@ -59,6 +75,8 @@ export default function ResumenClient({
             </div>
           ))}
         </section>
+
+        <UpcomingClientTasks tasks={clientTasks} />
       </div>
 
       {/* Right panel */}
@@ -118,13 +136,13 @@ export default function ResumenClient({
             <h2 className="text-[14px] font-bold tracking-tight">
               Lista de Tareas
             </h2>
-            <button
-              type="button"
-              aria-label="Opciones de tareas"
+            <Link
+              href="/tareas"
+              aria-label="Ver todas las tareas"
               className="text-ink-muted transition-colors hover:text-ink"
             >
               <MoreHorizontal size={18} />
-            </button>
+            </Link>
           </header>
           <div className="mt-4 animate-fade-up">
             <TaskList tasks={tasks} onToggle={toggleTask} />

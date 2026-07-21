@@ -16,6 +16,7 @@ import {
 } from "@/modules/crm/actions";
 import type { RunAction } from "./ClientesView";
 import CustomFieldCell from "./CustomFieldCell";
+import TaskMiniList from "@/components/tareas/TaskMiniList";
 
 const inputClass =
   "rounded-xl border border-edge bg-surface-2 px-3 py-2.5 text-[13px] text-ink outline-none transition-colors focus:border-primary/60";
@@ -353,6 +354,15 @@ export default function DealFormModal({
                 </div>
               ))}
             </div>
+          </fieldset>
+        )}
+
+        {mode === "edit" && deal && (
+          <fieldset className="rounded-xl border border-edge p-3">
+            <legend className="px-1 text-[11px] font-semibold uppercase tracking-widest text-ink-muted">
+              Tareas
+            </legend>
+            <TaskMiniList dealId={deal.id} />
           </fieldset>
         )}
 

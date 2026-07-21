@@ -22,8 +22,9 @@ import StrategyDocSection from "./StrategyDocSection";
 import AiPanel from "./ai/AiPanel";
 import CardFormModal from "./CardFormModal";
 import SopPanel from "./SopPanel";
+import TaskMiniList from "@/components/tareas/TaskMiniList";
 
-type Tab = "kanban" | "ficha" | "ia";
+type Tab = "kanban" | "ficha" | "tareas" | "ia";
 
 export type RunAction = (
   optimistic: (d: WorkspaceSnapshot) => WorkspaceSnapshot,
@@ -152,6 +153,9 @@ export default function WorkspaceView({
           <button type="button" className={tabClass(tab === "ficha")} onClick={() => setTab("ficha")}>
             Ficha
           </button>
+          <button type="button" className={tabClass(tab === "tareas")} onClick={() => setTab("tareas")}>
+            Tareas
+          </button>
           <button type="button" className={tabClass(tab === "ia")} onClick={() => setTab("ia")}>
             IA
           </button>
@@ -213,6 +217,15 @@ export default function WorkspaceView({
               latestStrategyGeneration={data.latestStrategyGeneration}
               runAction={runAction}
             />
+          </div>
+        )}
+
+        {tab === "tareas" && (
+          <div className="flex flex-col gap-3 overflow-y-auto pb-6">
+            <p className="text-[12px] text-ink-muted">
+              Tareas internas del equipo — no visibles para el cliente.
+            </p>
+            <TaskMiniList workspaceId={data.id} />
           </div>
         )}
 

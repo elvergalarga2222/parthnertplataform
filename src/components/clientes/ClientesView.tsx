@@ -6,6 +6,7 @@ import { Kanban, Plus, Settings2, Table2 } from "lucide-react";
 import type { CrmSnapshot, DealView } from "@/modules/crm/types";
 import { applyMoveLocally } from "@/modules/crm/helpers";
 import { moveDealAction, type ActionResult } from "@/modules/crm/actions";
+import { getOpenTaskCountsByDeal } from "@/modules/tasks/actions";
 import RecordsTable from "./RecordsTable";
 import PipelineBoard from "./PipelineBoard";
 import EditStagesModal from "./EditStagesModal";
@@ -36,6 +37,15 @@ export default function ClientesView({ snapshot }: { snapshot: CrmSnapshot }) {
     const id = setTimeout(() => setError(null), 4000);
     return () => clearTimeout(id);
   }, [error]);
+
+  // Badge de tareas abiertas por deal (PR-9, opcional) — on-demand, no
+  // engorda el snapshot principal del CRM.
+  const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const dealIds = data.deals.map((d) => d.id);
+    if (dealIds.length === 0) return;
+    getOpenTaskCountsByDeal(dealIds).then(setTaskCounts);
+  }, [data.deals]);
 
   // Optimistic runner: applies the local change, calls the server action and
   // reverts (plus toast) if it fails; on success re-syncs from the server.
@@ -109,6 +119,7 @@ export default function ClientesView({ snapshot }: { snapshot: CrmSnapshot }) {
         {view === "pipeline" ? (
           <PipelineBoard
             data={data}
+            taskCounts={taskCounts}
             onMoveDeal={handleMoveDeal}
             onOpenDeal={(deal) => setDealModal({ mode: "edit", deal })}
           />

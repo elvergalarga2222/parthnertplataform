@@ -14,10 +14,13 @@ type DealItem = DealView & { columnId: string };
 
 export default function PipelineBoard({
   data,
+  taskCounts,
   onMoveDeal,
   onOpenDeal,
 }: {
   data: CrmSnapshot;
+  /** Tareas abiertas por dealId (PR-9, opcional) — badge en el card. */
+  taskCounts?: Record<string, number>;
   onMoveDeal: (dealId: string, stageId: string, index: number) => void;
   onOpenDeal: (deal: DealView) => void;
 }) {
@@ -63,7 +66,9 @@ export default function PipelineBoard({
       items={items}
       onMove={onMoveDeal}
       onOpenItem={onOpenDeal}
-      renderCard={(item, overlay) => <DealCard deal={item} overlay={overlay} />}
+      renderCard={(item, overlay) => (
+        <DealCard deal={item} overlay={overlay} openTasksCount={taskCounts?.[item.id]} />
+      )}
       emptyColumnHint="Arrastra deals aquí"
       emptyBoardHint="No hay etapas todavía. Créalas desde el botón «Etapas»."
     />

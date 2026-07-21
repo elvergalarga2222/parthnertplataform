@@ -4,6 +4,7 @@ import { getCurrentActor, getMembershipAlert } from "@/modules/auth/service";
 import { getInvoiceAlerts } from "@/modules/finance/service";
 import { isTester } from "@/modules/feedback/service";
 import { listTeamForSidebar } from "@/modules/team/service";
+import { getTaskAlerts } from "@/modules/tasks/service";
 import Sidebar from "@/components/dashboard/Sidebar";
 import Topbar from "@/components/dashboard/Topbar";
 import FeedbackButton from "@/components/feedback/FeedbackButton";
@@ -24,9 +25,10 @@ export default async function AppLayout({
   }
   const { partner, collaborator } = actor;
 
-  const [team, alerts, membershipAlert] = await Promise.all([
+  const [team, alerts, taskAlerts, membershipAlert] = await Promise.all([
     listTeamForSidebar(partner.id),
     getInvoiceAlerts(partner.id),
+    getTaskAlerts(partner.id),
     getMembershipAlert(partner.id),
   ]);
   const displayName = collaborator
@@ -48,6 +50,7 @@ export default async function AppLayout({
           <Topbar
             displayName={displayName}
             alerts={alerts}
+            taskAlerts={taskAlerts}
             collaboratorOfPartnerName={
               collaborator ? (partner.displayName ?? partner.email) : null
             }

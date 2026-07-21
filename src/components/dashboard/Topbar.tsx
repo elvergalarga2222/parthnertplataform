@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Bell, Clock, Mail, Search } from "lucide-react";
+import { AlertTriangle, Bell, CheckSquare, Clock, Mail, Search } from "lucide-react";
 import type { InvoiceAlert, InvoiceAlerts } from "@/modules/finance/types";
+import type { TaskAlert, TaskAlerts } from "@/modules/tasks/types";
 import { formatMoney } from "@/lib/format";
 
 const EMPTY_ALERTS: InvoiceAlerts = { overdue: [], upcoming: [], total: 0 };
+const EMPTY_TASK_ALERTS: TaskAlerts = { overdue: [], dueToday: [], total: 0 };
 
 function alertLabel(a: InvoiceAlert): string {
   if (a.kind === "vencido") {
@@ -50,19 +52,45 @@ function AlertRow({ a }: { a: InvoiceAlert }) {
   );
 }
 
+function TaskAlertRow({ a }: { a: TaskAlert }) {
+  const overdue = a.daysOverdue > 0;
+  return (
+    <li className="flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-2">
+      <span
+        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+          overdue ? "bg-negative/15 text-negative" : "bg-amber-500/15 text-amber-400"
+        }`}
+      >
+        <CheckSquare size={14} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="truncate text-[13px] font-semibold text-ink">{a.title}</span>
+        <span className={`block text-[11.5px] ${overdue ? "text-negative" : "text-amber-400"}`}>
+          {overdue
+            ? `Vencida hace ${a.daysOverdue} ${a.daysOverdue === 1 ? "día" : "días"}`
+            : "Vence hoy"}
+          {a.assigneeName ? ` · ${a.assigneeName}` : ""}
+        </span>
+      </span>
+    </li>
+  );
+}
+
 export default function Topbar({
   displayName,
   alerts = EMPTY_ALERTS,
+  taskAlerts = EMPTY_TASK_ALERTS,
   /** "Colaborador de {partner}" — presente solo cuando actúa un colaborador (PR-8). */
   collaboratorOfPartnerName,
 }: {
   displayName: string;
   alerts?: InvoiceAlerts;
+  taskAlerts?: TaskAlerts;
   collaboratorOfPartnerName?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const count = alerts.total;
+  const count = alerts.total + taskAlerts.total;
 
   // Close the dropdown on outside click / Escape.
   useEffect(() => {
@@ -108,9 +136,7 @@ export default function Topbar({
           <button
             type="button"
             aria-label={
-              count > 0
-                ? `Notificaciones: ${count} cobros por atender`
-                : "Notificaciones"
+              count > 0 ? `Notificaciones: ${count} por atender` : "Notificaciones"
             }
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
@@ -131,7 +157,7 @@ export default function Topbar({
           {open && (
             <div className="absolute right-0 top-12 z-30 w-80 overflow-hidden rounded-2xl border border-edge bg-surface shadow-card-hover">
               <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-                <h3 className="text-[13px] font-bold tracking-tight">Cobros</h3>
+                <h3 className="text-[13px] font-bold tracking-tight">Notificaciones</h3>
                 {count > 0 && (
                   <span className="rounded-full bg-primary-faint px-2 py-0.5 text-[10.5px] font-semibold text-primary-soft">
                     {count} por atender
@@ -141,30 +167,36 @@ export default function Topbar({
 
               {count === 0 ? (
                 <p className="px-4 py-6 text-center text-[12.5px] text-ink-muted">
-                  No hay cobros vencidos ni próximos a vencer.
+                  No hay cobros ni tareas pendientes de atención.
                 </p>
               ) : (
                 <div className="max-h-96 overflow-y-auto">
-                  {alerts.overdue.length > 0 && (
+                  {alerts.total > 0 && (
                     <>
                       <p className="bg-surface-2 px-4 py-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-ink-muted">
-                        Vencidos
+                        Cobros
                       </p>
                       <ul className="divide-y divide-edge">
                         {alerts.overdue.map((a) => (
                           <AlertRow key={a.id} a={a} />
                         ))}
+                        {alerts.upcoming.map((a) => (
+                          <AlertRow key={a.id} a={a} />
+                        ))}
                       </ul>
                     </>
                   )}
-                  {alerts.upcoming.length > 0 && (
+                  {taskAlerts.total > 0 && (
                     <>
                       <p className="bg-surface-2 px-4 py-1.5 text-[10.5px] font-semibold uppercase tracking-widest text-ink-muted">
-                        Próximos a vencer
+                        Tareas
                       </p>
                       <ul className="divide-y divide-edge">
-                        {alerts.upcoming.map((a) => (
-                          <AlertRow key={a.id} a={a} />
+                        {taskAlerts.overdue.map((a) => (
+                          <TaskAlertRow key={a.id} a={a} />
+                        ))}
+                        {taskAlerts.dueToday.map((a) => (
+                          <TaskAlertRow key={a.id} a={a} />
                         ))}
                       </ul>
                     </>

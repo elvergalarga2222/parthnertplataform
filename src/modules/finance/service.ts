@@ -8,7 +8,7 @@ import {
   pipelineStages,
   workspaces,
 } from "@/db/schema";
-import { toIsoOrNull } from "@/lib/dates";
+import { daysBetween, toIsoOrNull } from "@/lib/dates";
 import {
   buildWeekBuckets,
   effectiveStatus,
@@ -164,15 +164,6 @@ export async function getPipelineOpen(
 // --- In-app alerts ----------------------------------------------------------
 
 const NEAR_DUE_DAYS = 3;
-
-/** Whole days from `today` to `dueDate` (negative when overdue). */
-function daysBetween(today: Date, dueDate: string): number {
-  const due = new Date(`${dueDate}T00:00:00.000Z`);
-  const start = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
-  );
-  return Math.round((due.getTime() - start.getTime()) / 86_400_000);
-}
 
 /**
  * Overdue and near-due (within 3 days) invoices for the topbar/dashboard alert.
