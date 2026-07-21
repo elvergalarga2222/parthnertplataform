@@ -178,7 +178,14 @@ workspace_sops (             -- instancia inyectada al crear el workspace
 )
 ```
 
-**Vista de Cliente:** ruta pública `/client-view/{token}` (sin login) que solo lee `kanban_tasks WHERE is_client_visible = true`, renderizada read-only. Token rotable por el Partner.
+> ⚠️ **El bloque SQL de arriba es el diseño original de la Épica 3, no lo implementado.** El esquema real usa `kanban_columns` + `kanban_cards` (columnas configurables por el Partner, `position` entero), no una tabla `kanban_tasks` con `status` de catálogo fijo ni posición fraccional. Ver `src/db/schema/workspace.ts` como fuente de verdad.
+
+**Vista de Cliente (implementada en PR-17):** ruta pública `/vista-cliente/[token]` (sin login, read-only) que expone solo `kanban_cards WHERE is_client_visible = true` del workspace resuelto por el token.
+
+- `kanban_cards.is_client_visible` es `boolean NOT NULL DEFAULT false` — **fail-closed**, al revés de lo que decía el diseño original (`DEFAULT true`). Con `true`, la migración habría publicado retroactivamente todas las tarjetas existentes en cuanto alguien activara un enlace.
+- El token vive en `workspaces.client_view_token_hash` (SHA-256, índice único) — solo el hash, como `collaborators.invite_token_hash`. El valor en claro se muestra una vez al Partner y no se puede recuperar.
+- `workspaces.client_view_enabled` apaga el enlace sin rotarlo; `rotateClientViewToken()` lo invalida generando uno nuevo. Sin TTL: es un enlace de consulta de meses. Si en el futuro hace falta expiración, se añade `client_view_expires_at` sin romper nada.
+- El cliente ve `title`, `description`, `dueDate` y el nombre de la columna. **No** ve `assignee`, SOPs, perfil ni generaciones de IA.
 
 ### 4.4 Estrategia e IA (Épica 4)
 
@@ -371,7 +378,7 @@ Cada módulo expone servicios internos; los módulos no se importan entre sí sa
 ### Fase 3 — Workspace + Kanban + Vista de Cliente (semanas 4–6)
 - Workspace por cliente, Kanban dnd-kit con los 4 estados nativos.
 - Inyección de SOPs/prompts desde `sop_templates` al crear el workspace.
-- Vista pública read-only por token con capado `is_client_visible`.
+- Vista pública read-only por token con capado `is_client_visible` (hecho, PR-17: `/vista-cliente/[token]`).
 
 ### Fase 4 — Finanzas (semanas 6–8)
 - Ingresos/gastos/cuentas por cobrar, job de vencimientos.
